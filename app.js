@@ -37,7 +37,7 @@ async function initFb() {
   const u = n => import(`https://www.gstatic.com/firebasejs/10.12.2/firebase-${n}.js`);
   const [a, au, fs] = await Promise.all([u('app'), u('auth'), u('firestore')]);
   const app = a.initializeApp(cfg), auth = au.getAuth(app);
-  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc };
+  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc, au, auth };
   au.onAuthStateChanged(auth, async us => {
     user = us;
     if (us) {
@@ -46,8 +46,7 @@ async function initFb() {
       $('#user').innerHTML = `${esc(us.email)}<br><button class="x" id="out">Sair</button>`;
       $('#out').onclick = () => au.signOut(auth);
     } else {
-      $('#user').innerHTML = '<button class="b" id="in">Entrar com Google</button>';
-      $('#in').onclick = () => au.signInWithPopup(auth, new au.GoogleAuthProvider());
+      $('#user').textContent = '';
     }
     render();
   });
@@ -115,7 +114,15 @@ function catsV() {
   <table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th></th></tr>${rows}</table></div>`;
 }
 
+function loginV() {
+  return `<h1>Entrar</h1><div class="card" style="max-width:360px"><div class="row" style="flex-direction:column;align-items:stretch">
+  <input id="em" type="email" placeholder="E-mail"><input id="pw" type="password" placeholder="Senha (mín. 6 caracteres)">
+  <button class="b" data-act="login">Entrar</button><button class="x" data-act="signup">Criar conta com e-mail</button>
+  <button class="x" data-act="google">Entrar com Google</button></div></div>`;
+}
+
 function render() {
+  if (fb && !user) { $('#main').innerHTML = loginV(); return; }
   charts.forEach(c => c.destroy()); charts = []; post = null;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
   $('#main').innerHTML = { dash, mes, cats: catsV }[view]();
@@ -125,6 +132,9 @@ function render() {
 // ---------- eventos ----------
 const val = id => $(id)?.value;
 const ACT = {
+  login() { fb.au.signInWithEmailAndPassword(fb.auth, val('#em'), val('#pw')).catch(e => alert(e.message)); },
+  signup() { fb.au.createUserWithEmailAndPassword(fb.auth, val('#em'), val('#pw')).catch(e => alert(e.message)); },
+  google() { fb.au.signInWithPopup(fb.auth, new fb.au.GoogleAuthProvider()).catch(e => alert(e.message)); },
   addtx() { const v = +val('#nv'); if (!v) return; M(mi).tx.push({ id: uid(), date: val('#nd'), valor: v, pag: val('#np'), cat: val('#nc'), desc: val('#ni') }); },
   deltx(d) { M(mi).tx = M(mi).tx.filter(x => x.id !== d.id); },
   addinst() { const v = +val('#iv'); if (!v) return; M(mi).inst.push({ id: uid(), valor: v, pag: val('#ip'), desc: val('#id'), pago: false }); },
