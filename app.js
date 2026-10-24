@@ -27,7 +27,7 @@ const uname = u => u.displayName || (u.email || '').split('@')[0];
 const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, charts = [], post = null, fb = null, user = null, timer;
 const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -94,6 +94,13 @@ function side() {
 
 // ---------- telas ----------
 const mv = (id, k) => { const a = S.dash, i = a.findIndex(g => g.id === id), j = i + k; if (j >= 0 && j < a.length) [a[i], a[j]] = [a[j], a[i]]; };
+const LAB = { id: 'lab', afterDatasetsDraw(ch) {
+  const x = ch.ctx; ch.data.datasets.forEach((d, i) => ch.getDatasetMeta(i).data.forEach((b, j) => {
+    const v = d.data[j]; if (!v) return;
+    x.save(); x.fillStyle = Chart.defaults.color; x.font = '11px sans-serif'; x.textAlign = 'left'; x.textBaseline = 'middle';
+    x.translate(b.x, b.y - 6); x.rotate(-Math.PI / 2); x.fillText(Math.round(v).toLocaleString('pt-BR'), 0, 0); x.restore();
+  }));
+} };
 function drawChart(g) {
   const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
@@ -103,9 +110,9 @@ function drawChart(g) {
     : cs.map(k => ({ label: k.name, data: ms.map(i => catMonth(k, i)), backgroundColor: k.color, borderColor: k.color }));
   charts.push(new Chart($(id), { type: bar ? 'bar' : 'line', data: { labels: ms.map(i => MES[i].slice(0, 3)), datasets: ds },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, ticks: { callback: v => brl(v) } } },
+      scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, grace: '15%', ticks: { callback: v => brl(v) } } },
       plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
-      onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } } }));
+      onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } }, plugins: res ? [LAB] : [] }));
 }
 function dash() {
   const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]), act = all.filter(x => x.g > 0);
@@ -156,16 +163,20 @@ function mes() {
     const k = cat(x.cat), d = x.date || '', first = i === 0 || (srt[i - 1].date || '') !== d, last = i === srt.length - 1 || (srt[i + 1].date || '') !== d, e = f => `data-e="tx:${f}:${x.id}"`;
     return `<tr><td ${e('date')} class="${last ? '' : 'dm'}">${first && d ? d.split('-').reverse().join('/') : ''}</td><td ${e('valor')} class="n">${brl(x.valor)}</td><td ${e('pag')}>${esc(x.pag)}</td><td ${e('cat')}><span class="tag" style="background:${k?.color || '#94a3b8'}">${esc(k?.name || '—')}</span></td><td ${e('desc')} title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="deltx" data-id="${x.id}">✕</button></td></tr>`;
   }).join('');
-  const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n">${brl(x.valor)}</td><td>${esc(x.pag)}</td><td title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n" data-e="inst:valor:${x.id}">${brl(x.valor)}</td><td data-e="inst:pag:${x.id}">${esc(x.pag)}</td><td data-e="inst:desc:${x.id}" title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
   const aPagar = sum(m.inst.filter(x => !x.pago), x => x.valor);
+  const pfm = pform ? `<div class="gs"><div class="row"><input id="pv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="pt"><option value="cada">de cada parcela</option><option value="total">total (dividir)</option></select><select id="pg2">${popt}</select><input id="pn" type="number" min="1" max="12" placeholder="Parcelas" style="width:100px"></div>
+    <div class="row"><input id="pd" placeholder="Descrição (ex.: Viagem)" style="flex:1;min-width:140px"><button class="b" data-act="addparc">Criar parcelas</button></div><small>Começa em ${MES[mi]} e segue pelos meses seguintes, até dezembro.</small></div>` : '';
   return `<h1>${MES[mi]} 2026</h1>
   <div class="row top"><div class="row" style="margin:0">${rc}</div><div class="seg">${[['mensal', 'Mensal'], ['quinzenal', 'Quinzenal'], ['semanal', 'Semanal']].map(([k, l]) => `<button data-act="modo" data-m="${k}" class="${md === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-  <div class="grid">${kpi('Saldo inicial', c.saldo)}${kpi('Gastos do mês', c.g)}${kpi('Reservado', c.sav)}${kpi('Disponível', c.disp, sgn(c.disp))}${kpi('Parcelas a pagar', aPagar)}</div>
-  <div class="cols"><div class="card"><h2>Despesas do mês · clique 2 vezes para editar</h2>
+  <div class="grid">${kpi('Saldo inicial', c.saldo)}${kpi('Gastos do mês', c.g)}${kpi('Disponível', c.disp, sgn(c.disp))}${kpi('Reservado', c.sav)}${kpi('Parcelas a pagar mês seguinte', aPagar, 'warn')}</div>
+  <div class="cols"><div class="card"><h2>Despesas do mês</h2>
+  <div><button class="x" data-act="pullprev">+ Puxar parcelas mês anterior</button></div>
   <div class="row"><input id="nd" type="date" value="${new Date().toISOString().slice(0, 10)}"><input id="nv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="np">${popt}</select><select id="nc">${copt}</select><input id="ni" placeholder="Descrição" style="flex:1;min-width:140px"><button class="b" data-act="addtx">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Pagamento</th><th>Categoria</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>
   <div><div class="card" style="margin-bottom:14px"><h2>Por categoria</h2><div class="chart" style="height:260px"><canvas id="cm"></canvas></div></div>
   <div class="card"><h2>Próximo mês · parcelas</h2>
+  <div><button class="x" data-ui="pf">${pform ? '✕ Fechar' : '+ Adicionar parcelamento'}</button></div>${pfm}
   <div class="row"><input id="iv" type="number" step="0.01" placeholder="Valor" style="width:100px"><select id="ip">${popt}</select><input id="id" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addinst">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Pago</th><th class="n">Valor</th><th>Pagamento</th><th>Descrição</th><th></th></tr>${inst}</table></div></div></div></div>
   <div class="card" style="margin-top:14px"><h2>Gastos por dia</h2><div class="chart"><canvas id="cd"></canvas></div></div>`;
@@ -290,7 +301,30 @@ const ACT = {
   addtx() { const v = +val('#nv'); if (v) M(mi).tx.push({ id: uid(), date: val('#nd'), valor: v, pag: val('#np'), cat: val('#nc'), desc: val('#ni') }); },
   deltx(d) { M(mi).tx = M(mi).tx.filter(x => x.id !== d.id); },
   addinst() { const v = +val('#iv'); if (v) M(mi).inst.push({ id: uid(), valor: v, pag: val('#ip'), desc: val('#id'), pago: false }); },
-  delinst(d) { M(mi).inst = M(mi).inst.filter(x => x.id !== d.id); },
+  delinst(d) {
+    const it = M(mi).inst.find(x => x.id === d.id);
+    if (it?.g && confirm('Remover também as parcelas seguintes deste parcelamento?')) MES.forEach((_, i) => { if (i >= mi) M(i).inst = M(i).inst.filter(x => x.g !== it.g); });
+    else M(mi).inst = M(mi).inst.filter(x => x.id !== d.id);
+  },
+  addparc() {
+    const v = +val('#pv'), n = Math.max(1, Math.min(12, parseInt(val('#pn')) || 1)), ds = (val('#pd') || '').trim(), tot = val('#pt') === 'total';
+    if (!v || !ds) return alert('Informe o valor e a descrição.');
+    const per = tot ? Math.floor(v / n * 100) / 100 : v, g = uid(), pag = val('#pg2'); let lost = 0;
+    for (let k = 0; k < n; k++) {
+      if (mi + k > 11) { lost++; continue; }
+      const vl = tot && k === n - 1 ? Math.round((v - per * (n - 1)) * 100) / 100 : per;
+      M(mi + k).inst.push({ id: uid(), valor: vl, pag, desc: `${k + 1}/${n} - ${ds}`, pago: false, g });
+    }
+    if (lost) alert(`${lost} parcela(s) passariam de dezembro e não foram criadas.`);
+    pform = false;
+  },
+  pullprev() {
+    if (mi === 0) return alert('Não há mês anterior.');
+    const m = M(mi), pv = M(mi - 1).inst, ct = S.cats.find(c => c.name === 'Parcelados') || S.cats.find(c => !c.saving), p2 = n => String(n).padStart(2, '0'), t = new Date();
+    const d = t.getMonth() === mi ? `${t.getFullYear()}-${p2(mi + 1)}-${p2(t.getDate())}` : `2026-${p2(mi + 1)}-01`, novos = pv.filter(x => !m.tx.some(y => y.from === x.id));
+    if (!novos.length) return alert(pv.length ? 'As parcelas do mês anterior já foram puxadas.' : 'O mês anterior não tem parcelas planejadas.');
+    novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: x.valor, pag: x.pag, cat: ct?.id, desc: x.desc, from: x.id }));
+  },
   addres() { const v = +val('#rv'); if (v) S.res.saidas.push({ id: uid(), date: val('#rd'), valor: v, desc: val('#rn') }); },
   delres(d) { S.res.saidas = S.res.saidas.filter(x => x.id !== d.id); },
   addsim() { const v = +val('#sv'); if (v) S.sim.itens.push({ id: uid(), desc: val('#sd'), valor: v, on: true }); },
@@ -316,7 +350,7 @@ const ACT = {
   }
 };
 const goto = v => { if (v === 'mes') { open = true; mi = ACTM(); } view = v; if (v === 'share' && user) loadShared().then(render); };
-const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; } };
+const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
 $('#main').ondragover = e => { if (drag) e.preventDefault(); };
@@ -375,7 +409,7 @@ $('#bd').onclick = () => $('#side').classList.remove('show');
 
 $('#main').ondblclick = e => {
   const td = e.target.closest('td[data-e]'); if (viewing || !td || td.querySelector('input,select')) return;
-  const [kind, k, id] = td.dataset.e.split(':'), x = (kind === 'tx' ? M(mi).tx : S.sim.itens).find(r => r.id === id); if (!x) return;
+  const [kind, k, id] = td.dataset.e.split(':'), x = (kind === 'tx' ? M(mi).tx : kind === 'inst' ? M(mi).inst : S.sim.itens).find(r => r.id === id); if (!x) return;
   const el = document.createElement(k === 'pag' || k === 'cat' ? 'select' : 'input');
   if (k === 'pag') el.innerHTML = S.pags.map(p => `<option>${esc(p)}</option>`).join('');
   else if (k === 'cat') el.innerHTML = S.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');

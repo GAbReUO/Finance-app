@@ -74,3 +74,5 @@ tr.paid td{background:rgba(244,63,94,.16)}
 .bi button:not(.x){flex:1;background:none;border:0;color:var(--tx);text-align:left;padding:9px 10px;font:inherit;cursor:pointer}.bi.on button:not(.x){color:var(--g);font-weight:600}
 .bsw{background:none;border:1px solid var(--line);color:var(--mut);border-radius:6px;cursor:pointer;margin-left:8px;padding:0 7px;font-size:12px}.bsw:hover{color:var(--g);border-color:var(--g)}
 .bn{display:block;color:var(--mut);font-size:12px;margin-top:2px}.uc .x{margin-left:auto}
+.warn{color:#facc15}
+.top label{font-size:17px}.top input[type=number]{font-size:22px;font-weight:600;padding:10px 12px;width:200px;max-width:100%}
