@@ -12,10 +12,16 @@ const DEF = () => ({
     ['Lazer', '#ec4899'], ['Vestuário', '#06b6d4'], ['Contas', '#f97316'], ['Outros', '#94a3b8']]
     .map(([name, color, saving]) => ({ id: uid(), name, color, saving: !!saving })), months: {}
 });
-const fix = s => { s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const DDASH = () => [
+  { id: uid(), title: 'Mês a mês', type: 'bar', metric: 'resumo', cats: [], from: 0, to: 11, wide: 0 },
+  { id: uid(), title: 'Gastos por categoria', type: 'donut', metric: 'cats', cats: [], from: 0, to: 11, wide: 0 },
+  { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
+];
+const uname = u => u.displayName || (u.email || '').split('@')[0];
+const fix = s => { s.dash ??= DDASH(); s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'dash', mi = NOW, open = false, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = NOW, open = false, dedit = null, charts = [], post = null, fb = null, user = null, timer;
 const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -29,7 +35,7 @@ const sgn = v => v < 0 ? 'neg' : 'pos';
 const donut = (id, items) => charts.push(new Chart($(id), {
   type: 'doughnut',
   data: { labels: items.map(x => x.n), datasets: [{ data: items.map(x => x.v), backgroundColor: items.map(x => x.c), borderColor: '#141414' }] },
-  options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'right' },
+  options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right' },
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
@@ -62,7 +68,7 @@ async function initFb() {
         if (s.exists()) { S = fix(s.data()); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
         else await cloud();
       } catch (e) { status('⚠ Erro ao acessar a nuvem: ' + (e.code || e.message), true); }
-      $('#user').innerHTML = `${esc(us.email)}<br><button class="x" id="out">Sair</button>`;
+      $('#user').innerHTML = `<div class="uc"><span class="av">${us.photoURL ? `<img src="${esc(us.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc((uname(us)[0] || '?').toUpperCase())}</span><span class="ui"><b>${esc(uname(us))}</b><small>${esc(us.email)}</small></span></div><button class="b out" id="out">Sair</button>`;
       $('#out').onclick = () => au.signOut(auth);
     } else $('#user').textContent = '';
     render();
@@ -72,38 +78,54 @@ async function initFb() {
 // ---------- menu ----------
 function side() {
   const it = (v, l, i) => `<button data-v="${v}" class="${view === v ? 'on' : ''}">${i} <span>${l}</span></button>`;
-  $('#nav').innerHTML = it('dash', 'Dashboard', '📊') +
+  $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
     (open ? `<div class="sub">${MES.map((n, i) => `<button data-m="${i}" class="${view === 'mes' && mi === i ? 'on' : ''} ${i === NOW ? 'now' : ''}">${n}</button>`).join('')}</div>` : '') +
     it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('cats', 'Categorias', '🏷️');
 }
 
 // ---------- telas ----------
+const mv = (id, k) => { const a = S.dash, i = a.findIndex(g => g.id === id), j = i + k; if (j >= 0 && j < a.length) [a[i], a[j]] = [a[j], a[i]]; };
+function drawChart(g) {
+  const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
+  const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
+  if (g.type === 'donut') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0));
+  const res = g.metric === 'resumo', bar = g.type !== 'line', all = ms.map(i => calc(i));
+  const ds = res ? [['Salário', 'saldo', '#525252'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c }))
+    : cs.map(k => ({ label: k.name, data: ms.map(i => catMonth(k, i)), backgroundColor: k.color, borderColor: k.color }));
+  charts.push(new Chart($(id), { type: bar ? 'bar' : 'line', data: { labels: ms.map(i => MES[i].slice(0, 3)), datasets: ds },
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, ticks: { callback: v => brl(v) } } },
+      plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
+      onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } } }));
+}
 function dash() {
-  const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]);
-  const byCat = S.cats.map(c => ({ n: c.name, c: c.color, v: sum(MES, (_, i) => 0) + MES.reduce((a, _, i) => a + catMonth(c, i), 0) })).filter(x => x.v > 0);
+  const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]), act = all.filter(x => x.g > 0);
   const resTot = (+S.res.inicial || 0) + t('sav') - sum(S.res.saidas, x => x.valor);
-  post = () => {
-    charts.push(new Chart($('#c1'), { type: 'bar',
-      data: { labels: MES.map(m => m.slice(0, 3)), datasets: [
-        { label: 'Salário', data: all.map(x => x.saldo), backgroundColor: '#525252' },
-        { label: 'Gastos', data: all.map(x => x.g), backgroundColor: '#f43f5e' },
-        { label: 'Reserva', data: all.map(x => x.sav), backgroundColor: '#22c55e' }] },
-      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${brl(c.parsed.y)}` } } },
-        scales: { y: { ticks: { callback: v => brl(v) } } },
-        onClick: (e, els) => { if (els.length) { mi = els[0].index; view = 'mes'; open = true; render(); } } } }));
-    donut('#c2', byCat);
-    charts.push(new Chart($('#c3'), { type: 'bar',
-      data: { labels: MES.map(m => m.slice(0, 3)), datasets: S.cats.filter(c => !c.saving).map(c => ({ label: c.name, data: MES.map((_, i) => catMonth(c, i)), backgroundColor: c.color })) },
-      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => brl(v) } } },
-        plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: c => c.parsed.y ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } } } }));
-  };
-  const act = all.filter(x => x.g > 0);
+  post = () => S.dash.forEach(drawChart);
+  const opt = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${l}</option>`).join('');
+  const mo = MES.map((m, i) => [i, m]);
+  const panel = g => `<div class="gs"><div class="row"><input data-f="gtitle" data-id="${g.id}" value="${esc(g.title)}" placeholder="Título do gráfico" style="flex:1;min-width:140px">
+    <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['donut', 'Rosca']], g.type)}</select>
+    ${g.type !== 'donut' ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
+    <div class="row"><label>De <select data-f="gfrom" data-id="${g.id}">${opt(mo, g.from)}</select></label><label>até <select data-f="gto" data-id="${g.id}">${opt(mo, g.to)}</select></label>
+    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label></div>
+    ${g.type === 'donut' || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
+    <div class="row" style="margin:10px 0 0"><button class="x" data-act="gdel" data-id="${g.id}">🗑 Remover gráfico</button></div></div>`;
+  const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
+    <button class="x" data-act="gup" data-id="${g.id}" title="Mover para cima">▲</button><button class="x" data-act="gdn" data-id="${g.id}" title="Mover para baixo">▼</button><button class="x" data-ui="gedit" data-id="${g.id}" title="Configurar">⚙</button></div>
+    ${dedit === g.id ? panel(g) : ''}<div class="chart"><canvas id="ch_${g.id}"></canvas></div></div>`;
   return `<h1>Dashboard</h1><div class="grid">${kpi('Salário no ano', t('saldo'))}${kpi('Gastos no ano', t('g'))}${kpi('Reservado em 2026', t('sav'))}${kpi('Reserva total', resTot)}${kpi('Média mensal de gastos', act.length ? t('g') / act.length : 0)}${kpi('Disponível no ano', t('disp'), sgn(t('disp')))}</div>
-  <div class="two"><div class="card"><h2>Mês a mês · clique numa barra para abrir o mês</h2><div class="chart"><canvas id="c1"></canvas></div></div>
-  <div class="card"><h2>Gastos por categoria · clique na legenda para ocultar</h2><div class="chart"><canvas id="c2"></canvas></div></div></div>
-  <div class="card"><h2>Evolução por categoria (sem reserva)</h2><div class="chart"><canvas id="c3"></canvas></div></div>`;
+  <div class="bar"><span style="color:var(--mut)">Arraste ⠿ ou use ▲▼ para reordenar · ⚙ para editar e filtrar</span><button class="b" data-act="gadd">+ Gráfico</button></div>
+  <div class="charts">${S.dash.map(card).join('')}</div>`;
+}
+
+function home() {
+  const T = [['dash', '📊', 'Dashboard', 'O ano em gráficos que você monta e filtra.'], ['mes', '🗓️', 'Mês', 'Gastos, saldo e parcelas do mês.'], ['cg', '📋', 'Controle Geral', 'Todos os meses lado a lado, por categoria.'],
+    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.']];
+  return `<h1>Olá${user ? ', ' + esc(uname(user)) : ''} 👋</h1>
+  <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne o controle financeiro da família: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
+  <div class="tiles">${T.map(([v, i, n, d]) => `<button class="card tile" data-ui="go" data-v="${v}"><span class="ti">${i}</span><b>${n}</b><small>${d}</small></button>`).join('')}</div>`;
 }
 
 function mes() {
@@ -146,26 +168,26 @@ function res() {
   ${kpi('Guardado em 2026', tot)}${kpi('Saídas da reserva', sai, 'neg')}${kpi('Total atual', (+r.inicial || 0) + tot - sai, 'pos')}</div>
   <div class="cols"><div class="card"><h2>Reserva acumulada · passe o mouse nos pontos</h2><div class="chart"><canvas id="cr"></canvas></div></div>
   <div class="card"><h2>Saídas da reserva</h2><div class="row"><input id="rd" type="date"><input id="rv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="rn" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addres">Adicionar</button></div>
-  <table><tr><th>Data</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>`;
+  <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${rows}</table></div></div></div>`;
 }
 
 function sim() {
   const s = S.sim, prev = sum(s.itens.filter(x => x.on !== false), x => x.valor), sobra = (+s.entrada || 0) - prev;
-  const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td>${esc(x.desc)}</td><td class="n">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w">${esc(x.desc)}</td><td class="n">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
   return `<h1>Simulação</h1><div class="grid">
   <div class="card kpi"><span>Entrada prevista (salário)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
   <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
-  <table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div>`;
+  <div class="scroll"><table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>`;
 }
 
 function catsV() {
   const rows = S.cats.map(c => `<tr><td><input type="color" data-f="ccolor" data-id="${c.id}" value="${c.color}"></td><td><input data-f="cname" data-id="${c.id}" value="${esc(c.name)}"></td>
   <td><label><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva (não conta como gasto)</label></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
   return `<h1>Categorias</h1><div class="card"><div class="row"><input type="color" id="ncc" value="#22c55e"><input id="ncn" placeholder="Nova categoria"><button class="b" data-act="addcat">Adicionar</button></div>
-  <table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th></th></tr>${rows}</table></div>`;
+  <div class="scroll"><table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th></th></tr>${rows}</table></div></div>`;
 }
 
 function loginV() {
@@ -177,7 +199,7 @@ function loginV() {
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side();
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
-  $('#main').innerHTML = { dash, mes, cg, res, sim, cats: catsV }[view]();
+  $('#main').innerHTML = { home, dash, mes, cg, res, sim, cats: catsV }[view]();
   post?.();
 }
 
@@ -197,16 +219,30 @@ const ACT = {
   delsim(d) { S.sim.itens = S.sim.itens.filter(x => x.id !== d.id); },
   simparc() { M(mi).inst.forEach(x => S.sim.itens.push({ id: uid(), desc: x.desc, valor: +x.valor, on: true })); },
   simclear() { if (confirm('Limpar toda a simulação?')) S.sim.itens = []; },
+  gadd() { const g = { id: uid(), title: 'Novo gráfico', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 0 }; S.dash.push(g); dedit = g.id; },
+  gdel(d) { if (confirm('Remover este gráfico?')) S.dash = S.dash.filter(g => g.id !== d.id); },
+  gup(d) { mv(d.id, -1); }, gdn(d) { mv(d.id, 1); },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
     if (MES.some((_, i) => M(i).tx.some(x => x.cat === d.id))) return alert('Esta categoria tem lançamentos. Mova-os antes de excluir.');
     S.cats = S.cats.filter(c => c.id !== d.id);
   }
 };
-$('#main').onclick = e => { const a = e.target.closest('[data-act]'); if (!a) return; ACT[a.dataset.act](a.dataset); save(); render(); };
+const goto = v => { if (v === 'mes') { open = true; mi = NOW; } view = v; };
+const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; } };
+let drag = null;
+$('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
+$('#main').ondragover = e => { if (drag) e.preventDefault(); };
+$('#main').ondrop = e => {
+  const to = e.target.closest('.gc')?.dataset.id; if (!drag || !to || to === drag) return;
+  const a = S.dash, i = a.findIndex(x => x.id === drag), j = a.findIndex(x => x.id === to); a.splice(j, 0, a.splice(i, 1)[0]); drag = null; save(); render();
+};
+$('#main').onclick = e => {
+  const u = e.target.closest('[data-ui]'); if (u) { UI[u.dataset.ui](u.dataset); render(); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return; ACT[a.dataset.act](a.dataset); save(); render(); };
 $('#main').onchange = e => {
   const t = e.target, f = t.dataset.f; if (!f) return;
-  const c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
+  const g = S.dash.find(x => x.id === t.dataset.id), c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
   if (f === 'saldo') M(mi).saldo = +t.value;
   else if (f === 'pago') i.pago = t.checked;
   else if (f === 'cname') c.name = t.value;
@@ -215,6 +251,13 @@ $('#main').onchange = e => {
   else if (f === 'rinicial') S.res.inicial = +t.value;
   else if (f === 'sentrada') S.sim.entrada = +t.value;
   else if (f === 'son') s.on = t.checked;
+  else if (f === 'gtitle') g.title = t.value;
+  else if (f === 'gtype') g.type = t.value;
+  else if (f === 'gmetric') g.metric = t.value;
+  else if (f === 'gfrom') { g.from = +t.value; g.to = Math.max(g.to, g.from); }
+  else if (f === 'gto') { g.to = +t.value; g.from = Math.min(g.from, g.to); }
+  else if (f === 'gwide') g.wide = +t.checked;
+  else if (f === 'gcat') g.cats = t.checked ? [...g.cats, t.dataset.c] : g.cats.filter(x => x !== t.dataset.c);
   save(); render();
 };
 $('#nav').onclick = e => {
@@ -222,17 +265,11 @@ $('#nav').onclick = e => {
   if (b.dataset.m !== undefined) { mi = +b.dataset.m; view = 'mes'; }
   else if (b.dataset.t) { open = !open; if (open) view = 'mes'; }
   else view = b.dataset.v;
+  if (!b.dataset.t) $('#side').classList.remove('show');
   render();
 };
-$('#imp').onclick = async () => {
-  try {
-    const d = await (await fetch('dados-2026.json')).json();
-    if (!confirm('Importar os dados da planilha? Isso SUBSTITUI os dados atuais do app.')) return;
-    S = fix(d); localStorage.setItem('fin26', JSON.stringify(S)); render();
-    try { await cloud(); alert('Dados importados e salvos na nuvem!'); }
-    catch (e) { alert('Importado só neste navegador. A nuvem recusou a gravação: ' + (e.code || e.message) + '\nVerifique as regras do Firestore.'); }
-  } catch (e) { alert('Não consegui ler dados-2026.json: ' + e.message); }
-};
+$('#burger').onclick = () => $('#side').classList.toggle('show');
+$('#bd').onclick = () => $('#side').classList.remove('show');
 
 Chart.defaults.color = '#8a8a8a';
 Chart.defaults.borderColor = '#262626';
