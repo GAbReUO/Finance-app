@@ -64,3 +64,6 @@ tr.paid td{background:rgba(244,63,94,.16)}
 .lock #side,.lock #top,.lock #bd{display:none}.lock main{display:grid;place-items:center;min-height:100vh}
 .login{width:min(380px,100%);padding:32px 28px;display:flex;flex-direction:column;gap:12px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .login h1{font-size:22px;margin:0}.login h1 b{color:var(--g)}.login p{margin:0 0 8px;color:var(--mut)}.login .lg{font-size:40px}.login input,.login .b{padding:12px}
+.cols>*,.two>*{min-width:0}
+@media(max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:720px){main{overflow-x:clip;max-width:100%}#top{width:100%}}
