@@ -33,13 +33,20 @@ const donut = (id, items) => charts.push(new Chart($(id), {
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
+const status = (t, bad) => { const e = $('#sync'); if (e) { e.textContent = t; e.style.color = bad ? '#f43f5e' : '#22c55e'; } };
+function cloud() {
+  if (!(fb && user)) return Promise.resolve();
+  status('☁ Salvando…');
+  return fb.setDoc(fb.doc(fb.db, 'users', user.uid, 'app', 'state'), JSON.parse(JSON.stringify(S)))
+    .then(() => status('☁ Salvo na nuvem'))
+    .catch(e => { status('⚠ Erro ao salvar na nuvem: ' + (e.code || e.message), true); throw e; });
+}
 function save() {
   localStorage.setItem('fin26', JSON.stringify(S));
-  if (fb && user) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fb.setDoc(fb.doc(fb.db, 'users', user.uid, 'app', 'state'), JSON.parse(JSON.stringify(S))), 600);
-  }
+  clearTimeout(timer);
+  timer = setTimeout(() => cloud().catch(() => {}), 400);
 }
+addEventListener('pagehide', () => { if (timer) { clearTimeout(timer); cloud().catch(() => {}); } });
 
 async function initFb() {
   if (!cfg.apiKey) { $('#user').textContent = 'Modo local (sem nuvem)'; return; }
@@ -50,8 +57,11 @@ async function initFb() {
   au.onAuthStateChanged(auth, async us => {
     user = us;
     if (us) {
-      const s = await fb.getDoc(fb.doc(fb.db, 'users', us.uid, 'app', 'state'));
-      if (s.exists()) S = fix(s.data()); else save();
+      try {
+        const s = await fb.getDoc(fb.doc(fb.db, 'users', us.uid, 'app', 'state'));
+        if (s.exists()) { S = fix(s.data()); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
+        else await cloud();
+      } catch (e) { status('⚠ Erro ao acessar a nuvem: ' + (e.code || e.message), true); }
       $('#user').innerHTML = `${esc(us.email)}<br><button class="x" id="out">Sair</button>`;
       $('#out').onclick = () => au.signOut(auth);
     } else $('#user').textContent = '';
@@ -218,7 +228,9 @@ $('#imp').onclick = async () => {
   try {
     const d = await (await fetch('dados-2026.json')).json();
     if (!confirm('Importar os dados da planilha? Isso SUBSTITUI os dados atuais do app.')) return;
-    S = fix(d); save(); render(); alert('Dados importados!');
+    S = fix(d); localStorage.setItem('fin26', JSON.stringify(S)); render();
+    try { await cloud(); alert('Dados importados e salvos na nuvem!'); }
+    catch (e) { alert('Importado só neste navegador. A nuvem recusou a gravação: ' + (e.code || e.message) + '\nVerifique as regras do Firestore.'); }
   } catch (e) { alert('Não consegui ler dados-2026.json: ' + e.message); }
 };
 
