@@ -130,21 +130,33 @@ function home() {
 
 function mes() {
   const m = M(mi), c = calc(mi);
-  post = () => donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0));
+  post = () => {
+    donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0));
+    const nd = new Date(2026, mi + 1, 0).getDate(), dl = Array.from({ length: nd }, (_, i) => i + 1);
+    const ds = S.cats.filter(k => !k.saving).map(k => ({ label: k.name, backgroundColor: k.color, data: dl.map(d => sum(m.tx.filter(x => x.cat === k.id && +String(x.date || '').slice(8, 10) === d), x => x.valor)) })).filter(d => d.data.some(v => v));
+    charts.push(new Chart($('#cd'), { type: 'bar', data: { labels: dl, datasets: ds }, options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { x: { stacked: true, title: { display: true, text: 'Dia do mês' } }, y: { stacked: true, ticks: { callback: v => brl(v) } } },
+      plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: c => c.parsed.y ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null, footer: it => 'Total: ' + brl(sum(it, i => i.parsed.y)) } } } } }));
+  };
   const copt = S.cats.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(''), popt = PAG.map(p => `<option>${p}</option>`).join('');
-  const rows = m.tx.map(x => { const k = cat(x.cat); return `<tr><td>${x.date ? x.date.split('-').reverse().join('/') : ''}</td><td class="n">${brl(x.valor)}</td><td>${esc(x.pag)}</td><td><span class="tag" style="background:${k?.color || '#94a3b8'}">${esc(k?.name || '—')}</span></td><td title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="deltx" data-id="${x.id}">✕</button></td></tr>`; }).join('');
-  const inst = m.inst.map(x => `<tr><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n">${brl(x.valor)}</td><td>${esc(x.pag)}</td><td title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const srt = [...m.tx].sort((p, q) => (p.date || '9999').localeCompare(q.date || '9999'));
+  const rows = srt.map((x, i) => {
+    const k = cat(x.cat), d = x.date || '', first = i === 0 || (srt[i - 1].date || '') !== d, last = i === srt.length - 1 || (srt[i + 1].date || '') !== d, e = f => `data-e="tx:${f}:${x.id}"`;
+    return `<tr><td ${e('date')} class="${last ? '' : 'dm'}">${first && d ? d.split('-').reverse().join('/') : ''}</td><td ${e('valor')} class="n">${brl(x.valor)}</td><td ${e('pag')}>${esc(x.pag)}</td><td ${e('cat')}><span class="tag" style="background:${k?.color || '#94a3b8'}">${esc(k?.name || '—')}</span></td><td ${e('desc')} title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="deltx" data-id="${x.id}">✕</button></td></tr>`;
+  }).join('');
+  const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n">${brl(x.valor)}</td><td>${esc(x.pag)}</td><td title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
   const aPagar = sum(m.inst.filter(x => !x.pago), x => x.valor);
   return `<h1>${MES[mi]} 2026</h1>
   <div class="row"><label>Saldo inicial <input type="number" step="0.01" data-f="saldo" value="${m.saldo || ''}" placeholder="0,00"></label></div>
   <div class="grid">${kpi('Saldo inicial', c.saldo)}${kpi('Gastos do mês', c.g)}${kpi('Reservado', c.sav)}${kpi('Disponível', c.disp, sgn(c.disp))}${kpi('Parcelas a pagar', aPagar)}</div>
-  <div class="cols"><div class="card"><h2>Despesas do mês</h2>
+  <div class="cols"><div class="card"><h2>Despesas do mês · clique 2 vezes para editar</h2>
   <div class="row"><input id="nd" type="date" value="${new Date().toISOString().slice(0, 10)}"><input id="nv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="np">${popt}</select><select id="nc">${copt}</select><input id="ni" placeholder="Descrição" style="flex:1;min-width:140px"><button class="b" data-act="addtx">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Pagamento</th><th>Categoria</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>
   <div><div class="card" style="margin-bottom:14px"><h2>Por categoria</h2><div class="chart" style="height:260px"><canvas id="cm"></canvas></div></div>
   <div class="card"><h2>Próximo mês · parcelas</h2>
   <div class="row"><input id="iv" type="number" step="0.01" placeholder="Valor" style="width:100px"><select id="ip">${popt}</select><input id="id" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addinst">Adicionar</button></div>
-  <div class="scroll"><table><tr><th>Pago</th><th class="n">Valor</th><th>Pagamento</th><th>Descrição</th><th></th></tr>${inst}</table></div></div></div></div>`;
+  <div class="scroll"><table><tr><th>Pago</th><th class="n">Valor</th><th>Pagamento</th><th>Descrição</th><th></th></tr>${inst}</table></div></div></div></div>
+  <div class="card" style="margin-top:14px"><h2>Gastos por dia</h2><div class="chart"><canvas id="cd"></canvas></div></div>`;
 }
 
 function cg() {
@@ -173,21 +185,21 @@ function res() {
 
 function sim() {
   const s = S.sim, prev = sum(s.itens.filter(x => x.on !== false), x => x.valor), sobra = (+s.entrada || 0) - prev;
-  const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w">${esc(x.desc)}</td><td class="n">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w" data-e="sim:desc:${x.id}">${esc(x.desc)}</td><td class="n" data-e="sim:valor:${x.id}">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
   return `<h1>Simulação</h1><div class="grid">
   <div class="card kpi"><span>Entrada prevista (salário)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
-  <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta</h2>
+  <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta · clique 2 vezes para editar</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
   <div class="scroll"><table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>`;
 }
 
 function catsV() {
-  const rows = S.cats.map(c => `<tr><td><input type="color" data-f="ccolor" data-id="${c.id}" value="${c.color}"></td><td><input data-f="cname" data-id="${c.id}" value="${esc(c.name)}"></td>
-  <td><label><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva (não conta como gasto)</label></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
+  const rows = S.cats.map(c => `<tr><td><input type="color" data-f="ccolor" data-id="${c.id}" value="${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#94a3b8'}"></td><td><input data-f="cname" data-id="${c.id}" value="${esc(c.name)}"></td>
+  <td><label><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva (não conta como gasto)</label></td><td><span class="tag" id="pv_${c.id}" style="background:${c.color}">${esc(c.name)}</span></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
   return `<h1>Categorias</h1><div class="card"><div class="row"><input type="color" id="ncc" value="#22c55e"><input id="ncn" placeholder="Nova categoria"><button class="b" data-act="addcat">Adicionar</button></div>
-  <div class="scroll"><table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th></th></tr>${rows}</table></div></div>`;
+  <div class="scroll"><table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th>Como aparece no Mês</th><th></th></tr>${rows}</table></div></div>`;
 }
 
 function loginV() {
@@ -271,6 +283,23 @@ $('#nav').onclick = e => {
 $('#burger').onclick = () => $('#side').classList.toggle('show');
 $('#bd').onclick = () => $('#side').classList.remove('show');
 
+$('#main').ondblclick = e => {
+  const td = e.target.closest('td[data-e]'); if (!td || td.querySelector('input,select')) return;
+  const [kind, k, id] = td.dataset.e.split(':'), x = (kind === 'tx' ? M(mi).tx : S.sim.itens).find(r => r.id === id); if (!x) return;
+  const el = document.createElement(k === 'pag' || k === 'cat' ? 'select' : 'input');
+  if (k === 'pag') el.innerHTML = PAG.map(p => `<option>${p}</option>`).join('');
+  else if (k === 'cat') el.innerHTML = S.cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  else { el.type = k === 'date' ? 'date' : k === 'valor' ? 'number' : 'text'; if (k === 'valor') el.step = '0.01'; }
+  el.value = x[k] ?? ''; el.style.maxWidth = '100%'; td.textContent = ''; td.append(el); el.focus();
+  let fin = false;
+  const done = ok => { if (fin) return; fin = true; if (ok) { x[k] = k === 'valor' ? +el.value || 0 : el.value; save(); } render(); };
+  el.onblur = () => done(true); el.onchange = () => el.tagName === 'SELECT' && done(true);
+  el.onkeydown = ev => { if (ev.key === 'Enter') done(true); if (ev.key === 'Escape') done(false); };
+};
+$('#main').oninput = e => {
+  const t = e.target, p = t.dataset.id && $('#pv_' + t.dataset.id); if (!p) return;
+  if (t.dataset.f === 'ccolor') p.style.background = t.value; else if (t.dataset.f === 'cname') p.textContent = t.value || '—';
+};
 Chart.defaults.color = '#8a8a8a';
 Chart.defaults.borderColor = '#262626';
 render();

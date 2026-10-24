@@ -51,3 +51,9 @@ main{padding:14px}h1{font-size:21px}
 .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.grid>:last-child:nth-child(odd){grid-column:1/-1}
 .kpi b{font-size:21px}.kpi span{font-size:13px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+input[type=color]{width:46px;height:34px;padding:3px;cursor:pointer}
+input[type=color]::-webkit-color-swatch-wrapper{padding:0}input[type=color]::-webkit-color-swatch,input[type=color]::-moz-color-swatch{border:0;border-radius:5px}
+td[data-e]{touch-action:manipulation}td[data-e]:hover{background:rgba(255,255,255,.04)}td.dm{border-bottom-color:transparent}
+tr.paid td{background:rgba(244,63,94,.16)}
+.charts{grid-template-columns:repeat(2,minmax(0,1fr))}.charts>.gc:last-child:nth-child(odd){grid-column:1/-1}
+@media(max-width:900px){.charts{grid-template-columns:minmax(0,1fr)}}
