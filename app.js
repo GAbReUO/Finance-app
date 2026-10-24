@@ -95,10 +95,10 @@ function side() {
 // ---------- telas ----------
 const mv = (id, k) => { const a = S.dash, i = a.findIndex(g => g.id === id), j = i + k; if (j >= 0 && j < a.length) [a[i], a[j]] = [a[j], a[i]]; };
 const LAB = { id: 'lab', afterDatasetsDraw(ch) {
-  const x = ch.ctx, n = ch.data.datasets.length, m0 = ch.getDatasetMeta(0).data, big = (m0.length > 1 ? Math.abs(m0[1].x - m0[0].x) / n : 99) >= 62;
+  const x = ch.ctx, n = ch.data.datasets.length, m0 = ch.getDatasetMeta(0).data, big = (m0.length > 1 ? Math.abs(m0[1].x - m0[0].x) / n : 99) >= 72;
   ch.data.datasets.forEach((d, i) => ch.getDatasetMeta(i).data.forEach((b, j) => {
     const v = d.data[j]; if (!v) return;
-    x.save(); x.fillStyle = d.lc || d.borderColor; x.font = (big ? '12px' : '10px') + ' sans-serif'; x.textAlign = 'center'; x.textBaseline = 'bottom';
+    x.save(); x.fillStyle = d.lc || d.borderColor; x.font = (big ? 'bold 14px' : 'bold 12px') + ' sans-serif'; x.textAlign = 'center'; x.textBaseline = 'bottom';
     x.fillText(big ? brl(v) : Math.round(v).toLocaleString('pt-BR'), b.x, b.y - 4); x.restore();
   }));
 } };
@@ -113,7 +113,7 @@ function drawChart(g) {
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, grace: '15%', ticks: { callback: v => brl(v) } } },
       plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
-      onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } }, plugins: res ? [LAB] : [] }));
+      onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } }, plugins: res && innerWidth >= 720 ? [LAB] : [] }));
 }
 function dash() {
   const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]), act = all.filter(x => x.g > 0);
@@ -210,13 +210,15 @@ function res() {
 function sim() {
   const s = S.sim, prev = sum(s.itens.filter(x => x.on !== false), x => x.valor), sobra = (+s.entrada || 0) - prev;
   const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w" data-e="sim:desc:${x.id}">${esc(x.desc)}</td><td class="n" data-e="sim:valor:${x.id}">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
+  post = () => donut('#cs', [{ n: 'Gastos previstos', c: '#f43f5e', v: prev }, { n: 'Disponível', c: '#22c55e', v: Math.max(sobra, 0) }].filter(x => x.v > 0));
   return `<h1>Simulação</h1><div class="grid">
   <div class="card kpi"><span>Entrada prevista (salário)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
   <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta · clique 2 vezes para editar</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
-  <div class="scroll"><table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>`;
+  <div class="scroll"><table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
+  <div class="card" style="margin-top:14px"><h2>Gastos × Disponível${sobra < 0 ? ' · gastos acima da entrada' : ''}</h2><div class="chart" style="height:320px"><canvas id="cs"></canvas></div></div>`;
 }
 
 function catsV() {
