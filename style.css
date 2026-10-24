@@ -57,3 +57,10 @@ td[data-e]{touch-action:manipulation}td[data-e]:hover{background:rgba(255,255,25
 tr.paid td{background:rgba(244,63,94,.16)}
 .charts{grid-template-columns:repeat(2,minmax(0,1fr))}.charts>.gc:last-child:nth-child(odd){grid-column:1/-1}
 @media(max-width:900px){.charts{grid-template-columns:minmax(0,1fr)}}
+#sync{margin-top:auto}#user{margin-top:0}
+.top{justify-content:space-between;align-items:flex-end}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{background:none;border:0;color:var(--mut);padding:9px 14px;cursor:pointer;font:inherit}.seg button.on{background:rgba(34,197,94,.15);color:var(--g);font-weight:600}
+.top label{display:flex;flex-direction:column;gap:4px;color:var(--mut);font-size:13px}
+.lock #side,.lock #top,.lock #bd{display:none}.lock main{display:grid;place-items:center;min-height:100vh}
+.login{width:min(380px,100%);padding:32px 28px;display:flex;flex-direction:column;gap:12px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login h1{font-size:22px;margin:0}.login h1 b{color:var(--g)}.login p{margin:0 0 8px;color:var(--mut)}.login .lg{font-size:40px}.login input,.login .b{padding:12px}
