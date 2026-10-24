@@ -24,10 +24,10 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = ACTM(), open = false, dedit = null, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], charts = [], post = null, fb = null, user = null, timer;
 const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -47,13 +47,14 @@ const donut = (id, items) => charts.push(new Chart($(id), {
 
 const status = (t, bad) => { const e = $('#sync'); if (e) { e.textContent = t; e.style.color = bad ? '#f43f5e' : '#22c55e'; } };
 function cloud() {
-  if (!(fb && user)) return Promise.resolve();
+  if (!(fb && user) || viewing) return Promise.resolve();
   status('☁ Salvando…');
   return fb.setDoc(fb.doc(fb.db, 'users', user.uid, 'app', 'state'), JSON.parse(JSON.stringify(S)))
     .then(() => status('☁ Salvo na nuvem'))
     .catch(e => { status('⚠ Erro ao salvar na nuvem: ' + (e.code || e.message), true); throw e; });
 }
 function save() {
+  if (viewing) return;
   localStorage.setItem('fin26', JSON.stringify(S));
   clearTimeout(timer);
   timer = setTimeout(() => cloud().catch(() => {}), 400);
@@ -65,9 +66,9 @@ async function initFb() {
   const u = n => import(`https://www.gstatic.com/firebasejs/10.12.2/firebase-${n}.js`);
   const [a, au, fs] = await Promise.all([u('app'), u('auth'), u('firestore')]);
   const app = a.initializeApp(cfg), auth = au.getAuth(app);
-  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc, au, auth };
+  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc, collection: fs.collection, getDocs: fs.getDocs, deleteDoc: fs.deleteDoc, au, auth };
   au.onAuthStateChanged(auth, async us => {
-    user = us;
+    viewing = null; mine = null; user = us;
     if (us) {
       try {
         const s = await fb.getDoc(fb.doc(fb.db, 'users', us.uid, 'app', 'state'));
@@ -76,6 +77,7 @@ async function initFb() {
       } catch (e) { status('⚠ Erro ao acessar a nuvem: ' + (e.code || e.message), true); }
       $('#user').innerHTML = `<div class="uc"><span class="av">${us.photoURL ? `<img src="${esc(us.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc((uname(us)[0] || '?').toUpperCase())}</span><span class="ui"><b>${esc(uname(us))}</b><small>${esc(us.email)}</small></span></div><button class="b out" id="out">Sair</button>`;
       $('#out').onclick = () => au.signOut(auth);
+      loadShared().then(render);
     } else $('#user').textContent = '';
     render();
   });
@@ -87,7 +89,7 @@ function side() {
   $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
     (open ? `<div class="sub">${MES.map((n, i) => `<button data-m="${i}" class="${view === 'mes' && mi === i ? 'on' : ''} ${i === ACTM() ? 'now' : ''}">${n}</button>`).join('')}</div>` : '') +
-    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('cats', 'Categorias', '🏷️');
+    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('cats', 'Categorias', '🏷️') + (viewing ? '' : it('share', 'Compartilhar', '🤝'));
 }
 
 // ---------- telas ----------
@@ -128,7 +130,7 @@ function dash() {
 
 function home() {
   const T = [['dash', '📊', 'Dashboard', 'O ano em gráficos que você monta e filtra.'], ['mes', '🗓️', 'Mês', 'Gastos, saldo e parcelas do mês.'], ['cg', '📋', 'Controle Geral', 'Todos os meses lado a lado, por categoria.'],
-    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.']];
+    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
   return `<h1>Olá${user ? ', ' + esc(uname(user)) : ''} 👋</h1>
   <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne o controle financeiro da família: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
   <div class="tiles">${T.map(([v, i, n, d]) => `<button class="card tile" data-ui="go" data-v="${v}"><span class="ti">${i}</span><b>${n}</b><small>${d}</small></button>`).join('')}</div>`;
@@ -220,11 +222,31 @@ function loginV() {
   <button class="b" data-act="login">Entrar</button><button class="x" data-act="signup">Criar conta com e-mail</button></div>`;
 }
 
+async function loadShared() {
+  shared = [];
+  try { const q = await fb.getDocs(fb.collection(fb.db, 'shared', (user.email || '').toLowerCase(), 'from')); shared = q.docs.map(d => ({ uid: d.id, email: d.data().ownerEmail })); }
+  catch (e) { shared = null; }
+}
+const ban = () => `<div class="ban"><span>👁 Você está vendo a base de <b>${esc(viewing.email)}</b> · somente leitura</span><button class="b" data-act="backmine">Voltar para minha base</button></div>`;
+function shareV() {
+  if (!(fb && user)) return '<h1>Compartilhar</h1><div class="card">Disponível apenas com login na nuvem.</div>';
+  const mineL = S.shareEmails.map((e, i) => `<tr><td>${esc(e)}</td><td><button class="x" data-act="delshare" data-id="${i}">✕</button></td></tr>`).join('');
+  const sh = shared === null ? '<p style="color:var(--red)">Não foi possível carregar. Verifique se seu e-mail está verificado e se as regras do Firebase foram atualizadas.</p>'
+    : shared.length ? `<div class="scroll"><table><tr><th>Compartilhado por</th><th></th></tr>${shared.map(x => `<tr><td>${esc(x.email)}</td><td class="n"><button class="b" data-act="openshare" data-uid="${x.uid}" data-email="${esc(x.email)}">Abrir</button></td></tr>`).join('')}</table></div>` : '<p style="color:var(--mut)">Ninguém compartilhou uma base com você ainda.</p>';
+  return `<h1>Compartilhar</h1>
+  ${user.emailVerified ? '' : `<div class="card" style="margin-bottom:14px"><h2>Verifique seu e-mail</h2><p>Para ver bases compartilhadas com você, seu e-mail precisa estar verificado.</p><div class="row"><button class="b" data-act="verify">Enviar e-mail de verificação</button><button class="x" data-act="verified">Já verifiquei</button></div></div>`}
+  <div class="card" style="margin-bottom:14px"><h2>Minha base · quem pode ver (somente leitura)</h2><div class="row"><input id="shr" type="email" placeholder="E-mail da pessoa" style="flex:1;min-width:180px"><button class="b" data-act="addshare">Compartilhar</button></div>
+  <div class="scroll"><table>${mineL}</table></div></div>
+  <div class="card"><h2>Bases compartilhadas comigo</h2>${sh}</div>`;
+}
+
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side(); document.body.classList.toggle('lock', !!(fb && !user));
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
-  $('#main').innerHTML = { home, dash, mes, cg, res, sim, cats: catsV }[view]();
+  if (viewing && view === 'share') view = 'home';
+  $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV }[view]();
   post?.();
+  if (viewing) $('#main').querySelectorAll('input,select,[data-act]').forEach(el => { if (el.dataset.act !== 'backmine') el.disabled = true; });
 }
 
 // ---------- eventos ----------
@@ -248,26 +270,32 @@ const ACT = {
   modo(d) { M(mi).modo = d.m; },
   addpag() { const n = val('#npg').trim(); if (n && !S.pags.includes(n)) S.pags.push(n); },
   delpag(d) { const n = S.pags[+d.id]; if (MES.some((_, i) => [...M(i).tx, ...M(i).inst].some(x => x.pag === n))) return alert('Esta forma de pagamento tem lançamentos. Altere-os antes de excluir.'); S.pags.splice(+d.id, 1); },
+  addshare() { const e = val('#shr').trim().toLowerCase(); if (!e.includes('@') || e === user.email.toLowerCase() || S.shareEmails.includes(e)) return alert('Informe um e-mail válido, diferente do seu e ainda não compartilhado.'); S.shareEmails.push(e); fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { ownerEmail: user.email }).catch(er => alert(ERR(er))); },
+  delshare(d) { const e = S.shareEmails.splice(+d.id, 1)[0]; fb.deleteDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid)).catch(() => {}); },
+  verify() { fb.au.sendEmailVerification(user).then(() => alert('E-mail de verificação enviado. Confira também o spam.')).catch(er => alert(ERR(er))); },
+  verified() { user.reload().then(() => user.getIdToken(true)).then(loadShared).then(render).catch(er => alert(ERR(er))); },
+  async openshare(d) { try { const r = await fb.getDoc(fb.doc(fb.db, 'users', d.uid, 'app', 'state')); if (!r.exists()) return alert('Esta base está vazia.'); mine = S; S = fix(r.data()); viewing = { uid: d.uid, email: d.email }; view = 'home'; mi = ACTM(); } catch (er) { alert('Sem permissão para abrir esta base: ' + (er.code || er.message)); } render(); },
+  backmine() { S = mine; viewing = null; mine = null; mi = ACTM(); view = 'home'; },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
     if (MES.some((_, i) => M(i).tx.some(x => x.cat === d.id))) return alert('Esta categoria tem lançamentos. Mova-os antes de excluir.');
     S.cats = S.cats.filter(c => c.id !== d.id);
   }
 };
-const goto = v => { if (v === 'mes') { open = true; mi = ACTM(); } view = v; };
+const goto = v => { if (v === 'mes') { open = true; mi = ACTM(); } view = v; if (v === 'share' && user) loadShared().then(render); };
 const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
 $('#main').ondragover = e => { if (drag) e.preventDefault(); };
 $('#main').ondrop = e => {
-  const to = e.target.closest('.gc')?.dataset.id; if (!drag || !to || to === drag) return;
+  const to = e.target.closest('.gc')?.dataset.id; if (viewing || !drag || !to || to === drag) return;
   const a = S.dash, i = a.findIndex(x => x.id === drag), j = a.findIndex(x => x.id === to); a.splice(j, 0, a.splice(i, 1)[0]); drag = null; save(); render();
 };
 $('#main').onclick = e => {
   const u = e.target.closest('[data-ui]'); if (u) { UI[u.dataset.ui](u.dataset); render(); return; }
-  const a = e.target.closest('[data-act]'); if (!a) return; ACT[a.dataset.act](a.dataset); save(); render(); };
+  const a = e.target.closest('[data-act]'); if (!a || (viewing && a.dataset.act !== 'backmine')) return; ACT[a.dataset.act](a.dataset); save(); render(); };
 $('#main').onchange = e => {
-  const t = e.target, f = t.dataset.f; if (!f) return;
+  const t = e.target, f = t.dataset.f; if (!f) return; if (viewing) return render();
   const g = S.dash.find(x => x.id === t.dataset.id), c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
   if (f === 'saldo') M(mi).saldo = +t.value;
   else if (f === 'pago') i.pago = t.checked;
@@ -294,6 +322,7 @@ $('#nav').onclick = e => {
   if (b.dataset.m !== undefined) { mi = +b.dataset.m; view = 'mes'; }
   else if (b.dataset.t) { open = !open; if (open) view = 'mes'; }
   else view = b.dataset.v;
+  if (view === 'share' && user) loadShared().then(render);
   if (!b.dataset.t) $('#side').classList.remove('show');
   render();
 };
@@ -302,7 +331,7 @@ $('#burger').onclick = () => $('#side').classList.toggle('show');
 $('#bd').onclick = () => $('#side').classList.remove('show');
 
 $('#main').ondblclick = e => {
-  const td = e.target.closest('td[data-e]'); if (!td || td.querySelector('input,select')) return;
+  const td = e.target.closest('td[data-e]'); if (viewing || !td || td.querySelector('input,select')) return;
   const [kind, k, id] = td.dataset.e.split(':'), x = (kind === 'tx' ? M(mi).tx : S.sim.itens).find(r => r.id === id); if (!x) return;
   const el = document.createElement(k === 'pag' || k === 'cat' ? 'select' : 'input');
   if (k === 'pag') el.innerHTML = S.pags.map(p => `<option>${esc(p)}</option>`).join('');
