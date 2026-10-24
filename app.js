@@ -95,10 +95,11 @@ function side() {
 // ---------- telas ----------
 const mv = (id, k) => { const a = S.dash, i = a.findIndex(g => g.id === id), j = i + k; if (j >= 0 && j < a.length) [a[i], a[j]] = [a[j], a[i]]; };
 const LAB = { id: 'lab', afterDatasetsDraw(ch) {
-  const x = ch.ctx; ch.data.datasets.forEach((d, i) => ch.getDatasetMeta(i).data.forEach((b, j) => {
+  const x = ch.ctx, n = ch.data.datasets.length, m0 = ch.getDatasetMeta(0).data, big = (m0.length > 1 ? Math.abs(m0[1].x - m0[0].x) / n : 99) >= 62;
+  ch.data.datasets.forEach((d, i) => ch.getDatasetMeta(i).data.forEach((b, j) => {
     const v = d.data[j]; if (!v) return;
-    x.save(); x.fillStyle = Chart.defaults.color; x.font = '11px sans-serif'; x.textAlign = 'left'; x.textBaseline = 'middle';
-    x.translate(b.x, b.y - 6); x.rotate(-Math.PI / 2); x.fillText(Math.round(v).toLocaleString('pt-BR'), 0, 0); x.restore();
+    x.save(); x.fillStyle = d.lc || d.borderColor; x.font = (big ? '12px' : '10px') + ' sans-serif'; x.textAlign = 'center'; x.textBaseline = 'bottom';
+    x.fillText(big ? brl(v) : Math.round(v).toLocaleString('pt-BR'), b.x, b.y - 4); x.restore();
   }));
 } };
 function drawChart(g) {
@@ -106,7 +107,7 @@ function drawChart(g) {
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
   if (g.type === 'donut') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0));
   const res = g.metric === 'resumo', bar = g.type !== 'line', all = ms.map(i => calc(i));
-  const ds = res ? [['Salário', 'saldo', '#525252'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c }))
+  const ds = res ? [['Salário', 'saldo', '#525252', '#a3a3a3'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c, lc]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c, lc: lc || c }))
     : cs.map(k => ({ label: k.name, data: ms.map(i => catMonth(k, i)), backgroundColor: k.color, borderColor: k.color }));
   charts.push(new Chart($(id), { type: bar ? 'bar' : 'line', data: { labels: ms.map(i => MES[i].slice(0, 3)), datasets: ds },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
