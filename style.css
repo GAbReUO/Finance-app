@@ -68,3 +68,9 @@ tr.paid td{background:rgba(244,63,94,.16)}
 @media(max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:720px){main{overflow-x:clip;max-width:100%}#top{width:100%}}
 .ban{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+#bmenu{position:fixed;z-index:40;width:290px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,.6);max-height:70vh;overflow:auto}#bmenu[hidden]{display:none}
+#bmenu h2{margin:8px 6px}#bmenu small{display:block;color:var(--mut);padding:4px 8px}.bi small{display:inline;padding:0}
+.bi{display:flex;align-items:center;border-radius:8px}.bi:hover{background:#1a1a1a}.bi.on{background:rgba(34,197,94,.15)}
+.bi button:not(.x){flex:1;background:none;border:0;color:var(--tx);text-align:left;padding:9px 10px;font:inherit;cursor:pointer}.bi.on button:not(.x){color:var(--g);font-weight:600}
+.bsw{background:none;border:1px solid var(--line);color:var(--mut);border-radius:6px;cursor:pointer;margin-left:8px;padding:0 7px;font-size:12px}.bsw:hover{color:var(--g);border-color:var(--g)}
+.bn{display:block;color:var(--mut);font-size:12px;margin-top:2px}.uc .x{margin-left:auto}

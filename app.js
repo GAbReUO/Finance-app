@@ -24,10 +24,10 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, charts = [], post = null, fb = null, user = null, timer;
 const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -49,13 +49,13 @@ const status = (t, bad) => { const e = $('#sync'); if (e) { e.textContent = t; e
 function cloud() {
   if (!(fb && user) || viewing) return Promise.resolve();
   status('☁ Salvando…');
-  return fb.setDoc(fb.doc(fb.db, 'users', user.uid, 'app', 'state'), JSON.parse(JSON.stringify(S)))
+  return fb.setDoc(fb.doc(fb.db, 'users', user.uid, 'app', curId), JSON.parse(JSON.stringify(S)))
     .then(() => status('☁ Salvo na nuvem'))
     .catch(e => { status('⚠ Erro ao salvar na nuvem: ' + (e.code || e.message), true); throw e; });
 }
 function save() {
   if (viewing) return;
-  localStorage.setItem('fin26', JSON.stringify(S));
+  if (curId === 'state') localStorage.setItem('fin26', JSON.stringify(S));
   clearTimeout(timer);
   timer = setTimeout(() => cloud().catch(() => {}), 400);
 }
@@ -66,17 +66,16 @@ async function initFb() {
   const u = n => import(`https://www.gstatic.com/firebasejs/10.12.2/firebase-${n}.js`);
   const [a, au, fs] = await Promise.all([u('app'), u('auth'), u('firestore')]);
   const app = a.initializeApp(cfg), auth = au.getAuth(app);
-  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc, collection: fs.collection, getDocs: fs.getDocs, deleteDoc: fs.deleteDoc, au, auth };
+  fb = { db: fs.getFirestore(app), doc: fs.doc, setDoc: fs.setDoc, getDoc: fs.getDoc, collection: fs.collection, getDocs: fs.getDocs, deleteDoc: fs.deleteDoc, deleteField: fs.deleteField, au, auth };
   au.onAuthStateChanged(auth, async us => {
-    viewing = null; mine = null; user = us;
+    viewing = null; mine = null; curId = 'state'; user = us;
     if (us) {
       try {
         const s = await fb.getDoc(fb.doc(fb.db, 'users', us.uid, 'app', 'state'));
-        if (s.exists()) { S = fix(s.data()); mi = ACTM(); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
-        else await cloud();
+        if (s.exists()) { S = load(s.data(), 'state'); bnames.state = S.nome; mi = ACTM(); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
+        else { S.nome ??= 'Base 1'; bnames.state = S.nome; await cloud(); }
       } catch (e) { status('⚠ Erro ao acessar a nuvem: ' + (e.code || e.message), true); }
-      $('#user').innerHTML = `<div class="uc"><span class="av">${us.photoURL ? `<img src="${esc(us.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc((uname(us)[0] || '?').toUpperCase())}</span><span class="ui"><b>${esc(uname(us))}</b><small>${esc(us.email)}</small></span></div><button class="b out" id="out">Sair</button>`;
-      $('#out').onclick = () => au.signOut(auth);
+      userBox();
       loadShared().then(render);
     } else $('#user').textContent = '';
     render();
@@ -85,6 +84,7 @@ async function initFb() {
 
 // ---------- menu ----------
 function side() {
+  document.querySelectorAll('.bn').forEach(e => e.textContent = viewing ? viewing.label + ' · somente leitura' : S.nome || '');
   const it = (v, l, i) => `<button data-v="${v}" class="${view === v ? 'on' : ''}">${i} <span>${l}</span></button>`;
   $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
@@ -218,24 +218,57 @@ function catsV() {
 
 function loginV() {
   return `<div class="login card"><div class="lg">💰</div><h1>Oliveira <b>Finance</b> App</h1><p>Entre para acessar o controle financeiro da família.</p>
-  <input id="em" type="email" placeholder="E-mail" autocomplete="username"><input id="pw" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password">
+  <input id="nm" placeholder="Seu nome (só para criar conta)" autocomplete="name"><input id="em" type="email" placeholder="E-mail" autocomplete="username"><input id="pw" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password">
   <button class="b" data-act="login">Entrar</button><button class="x" data-act="signup">Criar conta com e-mail</button></div>`;
 }
 
+const dref = (uid, id) => fb.doc(fb.db, 'users', uid, 'app', id);
+const load = (d, id) => { const x = fix(d); x.cats ??= DEF().cats; x.nome ??= id === 'state' ? 'Base 1' : 'Base 2'; return x; };
+function userBox() {
+  $('#user').innerHTML = `<div class="uc"><span class="av">${user.photoURL ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc((uname(user)[0] || '?').toUpperCase())}</span><span class="ui"><b>${esc(uname(user))}</b><small>${esc(user.email)}</small></span><button class="x" id="ed" title="Editar meu nome">✎</button></div><button class="b out" id="out">Sair</button>`;
+  $('#out').onclick = () => fb.au.signOut(fb.auth);
+  $('#ed').onclick = () => { const n = (prompt('Seu nome:', uname(user)) || '').trim(); if (n) fb.au.updateProfile(user, { displayName: n }).then(() => { userBox(); render(); }).catch(e => alert(ERR(e))); };
+}
+async function flush() { if (timer) { clearTimeout(timer); timer = null; await cloud().catch(() => {}); } }
+async function openOwn(id) {
+  if (viewing) { S = mine; viewing = null; mine = null; } else await flush();
+  if (id !== curId) {
+    try { const r = await fb.getDoc(dref(user.uid, id)); S = load(r.exists() ? r.data() : {}, id); curId = id; bnames[id] = S.nome; if (!r.exists()) await cloud(); }
+    catch (e) { alert('Não foi possível abrir a base: ' + (e.code || e.message)); }
+  }
+  view = 'home'; mi = ACTM(); render();
+}
+async function openShared(x) {
+  if (!viewing) await flush();
+  try { const r = await fb.getDoc(dref(x.uid, x.bid)); if (!r.exists()) return alert('Esta base está vazia.'); if (!viewing) mine = S; S = load(r.data(), x.bid); viewing = x; view = 'home'; mi = ACTM(); }
+  catch (er) { alert('Sem permissão para abrir esta base: ' + (er.code || er.message)); }
+  render();
+}
 async function loadShared() {
   shared = [];
-  try { const q = await fb.getDocs(fb.collection(fb.db, 'shared', (user.email || '').toLowerCase(), 'from')); shared = q.docs.map(d => ({ uid: d.id, email: d.data().ownerEmail })); }
-  catch (e) { shared = null; }
+  try {
+    const q = await fb.getDocs(fb.collection(fb.db, 'shared', (user.email || '').toLowerCase(), 'from'));
+    q.docs.forEach(d => { const v = d.data(); Object.entries(v.bases ?? { state: 'Base 1' }).forEach(([bid, label]) => shared.push({ uid: d.id, bid, label, email: v.ownerEmail, owner: v.ownerName || v.ownerEmail })); });
+  } catch (e) { shared = null; }
 }
-const ban = () => `<div class="ban"><span>👁 Você está vendo a base de <b>${esc(viewing.email)}</b> · somente leitura</span><button class="b" data-act="backmine">Voltar para minha base</button></div>`;
+async function bmenu(btn) {
+  const m = $('#bmenu'); if (!m.hidden) { m.hidden = true; return; } if (!(fb && user)) return;
+  for (const id of ['state', 'state2']) if (!(id in bnames)) { const d = id === 'state' ? 'Base 1' : 'Base 2'; try { const r = await fb.getDoc(dref(user.uid, id)); bnames[id] = (r.exists() && r.data().nome) || d; } catch (e) { bnames[id] = d; } }
+  await loadShared();
+  const own = ['state', 'state2'].map(id => `<div class="bi ${!viewing && curId === id ? 'on' : ''}"><button data-own="${id}">${esc(bnames[id])}</button><button class="x" data-ren="${id}" title="Renomear">✎</button></div>`).join('');
+  const sh = shared === null ? '<small>Não foi possível carregar.</small>' : shared.length ? shared.map((x, i) => `<div class="bi ${viewing && viewing.uid === x.uid && viewing.bid === x.bid ? 'on' : ''}"><button data-sh="${i}">${esc(x.label)} <small>· ${esc(x.owner)}</small></button></div>`).join('') : '<small>Nada compartilhado com você.</small>';
+  m.innerHTML = `<h2>Minhas bases</h2>${own}<h2>Compartilhadas comigo</h2>${sh}`;
+  const r = btn.getBoundingClientRect(); m.style.top = r.bottom + 6 + 'px'; m.style.left = Math.max(8, Math.min(r.left, innerWidth - 300)) + 'px'; m.hidden = false;
+}
+const ban = () => `<div class="ban"><span>👁 Você está vendo <b>${esc(viewing.label)}</b> de ${esc(viewing.owner)} · somente leitura</span><button class="b" data-act="backmine">Voltar para minha base</button></div>`;
 function shareV() {
   if (!(fb && user)) return '<h1>Compartilhar</h1><div class="card">Disponível apenas com login na nuvem.</div>';
-  const mineL = S.shareEmails.map((e, i) => `<tr><td>${esc(e)}</td><td><button class="x" data-act="delshare" data-id="${i}">✕</button></td></tr>`).join('');
-  const sh = shared === null ? '<p style="color:var(--red)">Não foi possível carregar. Verifique se seu e-mail está verificado e se as regras do Firebase foram atualizadas.</p>'
-    : shared.length ? `<div class="scroll"><table><tr><th>Compartilhado por</th><th></th></tr>${shared.map(x => `<tr><td>${esc(x.email)}</td><td class="n"><button class="b" data-act="openshare" data-uid="${x.uid}" data-email="${esc(x.email)}">Abrir</button></td></tr>`).join('')}</table></div>` : '<p style="color:var(--mut)">Ninguém compartilhou uma base com você ainda.</p>';
+  const mineL = S.shareEmails.map((e, i) => `<tr><td>${esc(e)}</td><td>${esc(S.shareLabels[e] || '')}</td><td><button class="x" data-act="delshare" data-id="${i}">✕</button></td></tr>`).join('');
+  const sh = shared === null ? '<p style="color:var(--red)">Não foi possível carregar. Verifique se seu e-mail está verificado.</p>'
+    : shared.length ? `<div class="scroll"><table><tr><th>Base</th><th>Compartilhada por</th><th></th></tr>${shared.map((x, i) => `<tr><td>${esc(x.label)}</td><td>${esc(x.owner)}</td><td class="n"><button class="b" data-act="openshare" data-i="${i}">Abrir</button></td></tr>`).join('')}</table></div>` : '<p style="color:var(--mut)">Ninguém compartilhou uma base com você ainda.</p>';
   return `<h1>Compartilhar</h1>
   ${user.emailVerified ? '' : `<div class="card" style="margin-bottom:14px"><h2>Verifique seu e-mail</h2><p>Para ver bases compartilhadas com você, seu e-mail precisa estar verificado.</p><div class="row"><button class="b" data-act="verify">Enviar e-mail de verificação</button><button class="x" data-act="verified">Já verifiquei</button></div></div>`}
-  <div class="card" style="margin-bottom:14px"><h2>Minha base · quem pode ver (somente leitura)</h2><div class="row"><input id="shr" type="email" placeholder="E-mail da pessoa" style="flex:1;min-width:180px"><button class="b" data-act="addshare">Compartilhar</button></div>
+  <div class="card" style="margin-bottom:14px"><h2>Base atual: ${esc(S.nome || '')} · quem pode ver (somente leitura)</h2><div class="row"><input id="shr" type="email" placeholder="E-mail da pessoa" style="flex:1;min-width:170px"><input id="shl" placeholder="Nome que ela verá (ex.: Dados 1)" style="flex:1;min-width:170px"><button class="b" data-act="addshare">Compartilhar</button></div>
   <div class="scroll"><table>${mineL}</table></div></div>
   <div class="card"><h2>Bases compartilhadas comigo</h2>${sh}</div>`;
 }
@@ -253,7 +286,7 @@ function render() {
 const val = id => $(id)?.value;
 const ACT = {
   login() { fb.au.signInWithEmailAndPassword(fb.auth, val('#em'), val('#pw')).catch(e => alert(ERR(e))); },
-  signup() { fb.au.createUserWithEmailAndPassword(fb.auth, val('#em'), val('#pw')).catch(e => alert(ERR(e))); },
+  signup() { const n = val('#nm').trim(); if (!n) return alert('Informe seu nome para criar a conta.'); fb.au.createUserWithEmailAndPassword(fb.auth, val('#em'), val('#pw')).then(c => fb.au.updateProfile(c.user, { displayName: n })).then(() => { userBox(); render(); }).catch(e => alert(ERR(e))); },
   addtx() { const v = +val('#nv'); if (v) M(mi).tx.push({ id: uid(), date: val('#nd'), valor: v, pag: val('#np'), cat: val('#nc'), desc: val('#ni') }); },
   deltx(d) { M(mi).tx = M(mi).tx.filter(x => x.id !== d.id); },
   addinst() { const v = +val('#iv'); if (v) M(mi).inst.push({ id: uid(), valor: v, pag: val('#ip'), desc: val('#id'), pago: false }); },
@@ -270,11 +303,11 @@ const ACT = {
   modo(d) { M(mi).modo = d.m; },
   addpag() { const n = val('#npg').trim(); if (n && !S.pags.includes(n)) S.pags.push(n); },
   delpag(d) { const n = S.pags[+d.id]; if (MES.some((_, i) => [...M(i).tx, ...M(i).inst].some(x => x.pag === n))) return alert('Esta forma de pagamento tem lançamentos. Altere-os antes de excluir.'); S.pags.splice(+d.id, 1); },
-  addshare() { const e = val('#shr').trim().toLowerCase(); if (!e.includes('@') || e === user.email.toLowerCase() || S.shareEmails.includes(e)) return alert('Informe um e-mail válido, diferente do seu e ainda não compartilhado.'); S.shareEmails.push(e); fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { ownerEmail: user.email }).catch(er => alert(ERR(er))); },
-  delshare(d) { const e = S.shareEmails.splice(+d.id, 1)[0]; fb.deleteDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid)).catch(() => {}); },
+  addshare() { const e = val('#shr').trim().toLowerCase(), lb = val('#shl').trim() || S.nome; if (!e.includes('@') || e === user.email.toLowerCase() || S.shareEmails.includes(e)) return alert('Informe um e-mail válido, diferente do seu e ainda não compartilhado.'); S.shareEmails.push(e); S.shareLabels[e] = lb; fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { ownerEmail: user.email, ownerName: uname(user), bases: { [curId]: lb } }, { merge: true }).catch(er => alert(ERR(er))); },
+  delshare(d) { const e = S.shareEmails.splice(+d.id, 1)[0]; delete S.shareLabels[e]; fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { bases: { [curId]: fb.deleteField() } }, { merge: true }).catch(() => {}); },
   verify() { fb.au.sendEmailVerification(user).then(() => alert('E-mail de verificação enviado. Confira também o spam.')).catch(er => alert(ERR(er))); },
   verified() { user.reload().then(() => user.getIdToken(true)).then(loadShared).then(render).catch(er => alert(ERR(er))); },
-  async openshare(d) { try { const r = await fb.getDoc(fb.doc(fb.db, 'users', d.uid, 'app', 'state')); if (!r.exists()) return alert('Esta base está vazia.'); mine = S; S = fix(r.data()); viewing = { uid: d.uid, email: d.email }; view = 'home'; mi = ACTM(); } catch (er) { alert('Sem permissão para abrir esta base: ' + (er.code || er.message)); } render(); },
+  openshare(d) { openShared(shared[+d.i]); },
   backmine() { S = mine; viewing = null; mine = null; mi = ACTM(); view = 'home'; },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
@@ -327,6 +360,16 @@ $('#nav').onclick = e => {
   render();
 };
 $('#main').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'pw') ACT.login(); });
+document.querySelectorAll('.bsw').forEach(b => b.onclick = () => bmenu(b));
+document.addEventListener('click', e => { if (!e.target.closest('#bmenu,.bsw')) $('#bmenu').hidden = true; });
+$('#bmenu').onclick = async e => {
+  const o = e.target.closest('[data-own]'), r = e.target.closest('[data-ren]'), x = e.target.closest('[data-sh]'), m = $('#bmenu');
+  if (r) {
+    const id = r.dataset.ren, n = (prompt('Nome da base:', bnames[id]) || '').trim(); if (!n) return;
+    try { await fb.setDoc(dref(user.uid, id), { nome: n }, { merge: true }); bnames[id] = n; if (id === curId) (viewing ? mine : S).nome = n; } catch (er) { alert(ERR(er)); }
+    m.hidden = true; side();
+  } else if (o || x) { m.hidden = true; $('#side').classList.remove('show'); if (o) openOwn(o.dataset.own); else openShared(shared[+x.dataset.sh]); }
+};
 $('#burger').onclick = () => $('#side').classList.toggle('show');
 $('#bd').onclick = () => $('#side').classList.remove('show');
 
