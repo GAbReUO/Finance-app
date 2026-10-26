@@ -231,7 +231,7 @@ function catsV() {
 }
 
 function loginV() {
-  return `<div class="login card"><div class="lg">💰</div><h1>Oliveira <b>Finance</b> App</h1><p>Entre para acessar o controle financeiro da família.</p>
+  return `<div class="login card"><div class="lg">💰</div><h1>Oliveira <b>Finance</b> App</h1><p>Entre para acessar seu controle financeiro.</p>
   <input id="nm" placeholder="Seu nome (só para criar conta)" autocomplete="name"><input id="em" type="email" placeholder="E-mail" autocomplete="username"><input id="pw" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password">
   <button class="b" data-act="login">Entrar</button><button class="x" data-act="signup">Criar conta com e-mail</button></div>`;
 }
