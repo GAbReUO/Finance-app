@@ -27,7 +27,7 @@ const uname = u => u.displayName || (u.email || '').split('@')[0];
 const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, ppick = false, drf = {}, charts = [], post = null, fb = null, user = null, timer;
 const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -38,10 +38,20 @@ const calc = i => {
 const catMonth = (c, i) => sum(M(i).tx.filter(x => x.cat === c.id), x => x.valor);
 const kpi = (l, v, cls = '') => `<div class="card kpi"><span>${l}</span><b class="${cls}">${brl(v)}</b></div>`;
 const sgn = v => v < 0 ? 'neg' : 'pos';
-const donut = (id, items) => charts.push(new Chart($(id), {
+const dlab = mode => ({ id: 'dlab', afterDatasetsDraw(ch) {
+  const x = ch.ctx, d = ch.data.datasets[0], tot = d.data.reduce((a, b) => a + b, 0);
+  ch.getDatasetMeta(0).data.forEach((a, i) => {
+    const v = d.data[i]; if (!v || v / tot < 0.04 || !ch.getDataVisibility(i)) return;
+    const p = a.getCenterPoint(), t = mode === 'val' ? brl(v) : (v / tot * 100).toFixed(1).replace('.', ',') + '%';
+    x.save(); x.font = (innerWidth < 720 ? 'bold 13px' : 'bold 16px') + ' sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.7)'; x.fillStyle = '#fff'; x.strokeText(t, p.x, p.y); x.fillText(t, p.x, p.y); x.restore();
+  });
+} });
+const donut = (id, items, mode) => charts.push(new Chart($(id), {
+  plugins: mode ? [dlab(mode)] : [],
   type: 'doughnut',
   data: { labels: items.map(x => x.n), datasets: [{ data: items.map(x => x.v), backgroundColor: items.map(x => x.c), borderColor: '#141414' }] },
-  options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right' },
+  options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
@@ -105,14 +115,14 @@ const LAB = { id: 'lab', afterDatasetsDraw(ch) {
 function drawChart(g) {
   const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
-  if (g.type === 'donut') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0));
+  if (g.type === 'donut') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), innerWidth >= 720 ? g.lbl : null);
   const res = g.metric === 'resumo', bar = g.type !== 'line', all = ms.map(i => calc(i));
-  const ds = res ? [['Salário', 'saldo', '#525252', '#a3a3a3'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c, lc]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c, lc: lc || c }))
+  const ds = res ? [['Salário', 'saldo', '#ffffff'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c, lc]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c, lc: lc || c }))
     : cs.map(k => ({ label: k.name, data: ms.map(i => catMonth(k, i)), backgroundColor: k.color, borderColor: k.color }));
   charts.push(new Chart($(id), { type: bar ? 'bar' : 'line', data: { labels: ms.map(i => MES[i].slice(0, 3)), datasets: ds },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, grace: '15%', ticks: { callback: v => brl(v) } } },
-      plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right' }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
+      plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
       onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } }, plugins: res && innerWidth >= 720 ? [LAB] : [] }));
 }
 function dash() {
@@ -125,7 +135,7 @@ function dash() {
     <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['donut', 'Rosca']], g.type)}</select>
     ${g.type !== 'donut' ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
     <div class="row"><label>De <select data-f="gfrom" data-id="${g.id}">${opt(mo, g.from)}</select></label><label>até <select data-f="gto" data-id="${g.id}">${opt(mo, g.to)}</select></label>
-    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label></div>
+    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${g.type === 'donut' ? `<label>Rótulos (PC) <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
     ${g.type === 'donut' || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
     <div class="row" style="margin:10px 0 0"><button class="x" data-act="gdel" data-id="${g.id}">🗑 Remover gráfico</button></div></div>`;
   const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
@@ -140,7 +150,7 @@ function home() {
   const T = [['dash', '📊', 'Dashboard', 'O ano em gráficos que você monta e filtra.'], ['mes', '🗓️', 'Mês', 'Gastos, saldo e parcelas do mês.'], ['cg', '📋', 'Controle Geral', 'Todos os meses lado a lado, por categoria.'],
     ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
   return `<h1>Olá${user ? ', ' + esc(uname(user)) : ''} 👋</h1>
-  <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne seu controle financeiro: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
+  <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne o controle financeiro da família: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
   <div class="tiles">${T.map(([v, i, n, d]) => `<button class="card tile" data-ui="go" data-v="${v}"><span class="ti">${i}</span><b>${n}</b><small>${d}</small></button>`).join('')}</div>`;
 }
 
@@ -150,7 +160,7 @@ function mes() {
     : md === 'semanal' ? `<label>Semanas no mês <input type="number" min="1" max="6" data-f="nsem" value="${m.nsem ?? wk(mi)}" style="width:80px"></label><label>Valor por semana (R$) ${num('vsem', m.vsem)}</label>`
     : `<label>Saldo inicial (R$) ${num('saldo', m.saldo)}</label>`;
   post = () => {
-    donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0));
+    donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0), 'pct');
     const p2 = n => String(n).padStart(2, '0'), nd = new Date(2026, mi + 1, 0).getDate();
     const dl = [...new Set([...Array.from({ length: nd }, (_, i) => `2026-${p2(mi + 1)}-${p2(i + 1)}`), ...m.tx.map(x => x.date).filter(Boolean)])].sort();
     const ds = S.cats.filter(k => !k.saving).map(k => ({ label: k.name, backgroundColor: k.color, data: dl.map(d => sum(m.tx.filter(x => x.cat === k.id && x.date === d), x => x.valor)) })).filter(d => d.data.some(v => v));
@@ -168,11 +178,13 @@ function mes() {
   const aPagar = sum(m.inst.filter(x => !x.pago), x => x.valor);
   const pfm = pform ? `<div class="gs"><div class="row"><input id="pv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="pt"><option value="cada">de cada parcela</option><option value="total">total (dividir)</option></select><select id="pg2">${popt}</select><input id="pn" type="number" min="1" max="12" placeholder="Parcelas" style="width:100px"></div>
     <div class="row"><input id="pd" placeholder="Descrição (ex.: Viagem)" style="flex:1;min-width:140px"><button class="b" data-act="addparc">Criar parcelas</button></div><small>Começa em ${MES[mi]} e segue pelos meses seguintes, até dezembro.</small></div>` : '';
+  const ppl = mi > 0 ? M(mi - 1).inst.filter(x => !m.tx.some(y => y.from === x.id)) : [];
+  const ppanel = `<div class="gs">${ppl.length ? ppl.map(x => `<div><button class="x" data-act="pullprev" data-id="${x.id}">+ ${esc(x.desc)} · ${brl(x.valor)} · ${esc(x.pag)}</button></div>`).join('') : '<small>Nenhuma parcela pendente do mês anterior.</small>'}</div>`;
   return `<h1>${MES[mi]} 2026</h1>
   <div class="row top"><div class="row" style="margin:0">${rc}</div><div class="seg">${[['mensal', 'Mensal'], ['quinzenal', 'Quinzenal'], ['semanal', 'Semanal']].map(([k, l]) => `<button data-act="modo" data-m="${k}" class="${md === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
   <div class="grid">${kpi('Saldo inicial', c.saldo)}${kpi('Gastos do mês', c.g)}${kpi('Disponível', c.disp, sgn(c.disp))}${kpi('Reservado', c.sav)}${kpi('Parcelas a pagar mês seguinte', aPagar, 'warn')}</div>
   <div class="cols"><div class="card"><h2>Despesas do mês</h2>
-  <div><button class="x" data-act="pullprev">+ Puxar parcelas mês anterior</button></div>
+  <div><button class="x" data-act="pullprev">+ Puxar parcelas mês anterior</button><button class="x" data-ui="pp">${ppick ? '✕ Fechar' : '+ Puxar parcela específica'}</button></div>${ppick ? ppanel : ''}
   <div class="row"><input id="nd" type="date" value="${new Date().toISOString().slice(0, 10)}"><input id="nv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="np">${popt}</select><select id="nc">${copt}</select><input id="ni" placeholder="Descrição" style="flex:1;min-width:140px"><button class="b" data-act="addtx">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Pagamento</th><th>Categoria</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>
   <div><div class="card" style="margin-bottom:14px"><h2>Por categoria</h2><div class="chart" style="height:260px"><canvas id="cm"></canvas></div></div>
@@ -185,7 +197,7 @@ function mes() {
 
 function cg() {
   const row = (l, f, cls = '', dot = '') => { const v = MES.map((_, i) => f(i)); return `<tr class="${cls}"><td>${dot}${esc(l)}</td>${v.map(x => `<td class="n">${x ? brl(x) : '–'}</td>`).join('')}<td class="n"><b>${brl(sum(v, x => x))}</b></td></tr>`; };
-  return `<h1>Controle Geral</h1><div class="card scroll"><table><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th></tr>
+  return `<h1>Controle Geral</h1><div class="card scroll"><table class="cgt"><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th></tr>
   ${row('Salário', i => calc(i).saldo)}${row('Gastos', i => calc(i).g)}${row('Reserva', i => calc(i).sav)}${row('Disponível', i => calc(i).disp, 'sum')}
   <tr class="h"><td colspan="14">GASTOS POR CATEGORIA</td></tr>
   ${S.cats.map(c => row(c.name, i => catMonth(c, i), '', `<span class="tag" style="background:${c.color};margin-right:8px">&nbsp;</span>`)).join('')}
@@ -210,14 +222,14 @@ function res() {
 function sim() {
   const s = S.sim, prev = sum(s.itens.filter(x => x.on !== false), x => x.valor), sobra = (+s.entrada || 0) - prev;
   const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w" data-e="sim:desc:${x.id}">${esc(x.desc)}</td><td class="n" data-e="sim:valor:${x.id}">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
-  post = () => donut('#cs', [{ n: 'Gastos previstos', c: '#f43f5e', v: prev }, { n: 'Disponível', c: '#22c55e', v: Math.max(sobra, 0) }].filter(x => x.v > 0));
+  post = () => donut('#cs', [{ n: 'Gastos previstos', c: '#f43f5e', v: prev }, { n: 'Disponível', c: '#22c55e', v: Math.max(sobra, 0) }].filter(x => x.v > 0), 'pct');
   return `<h1>Simulação</h1><div class="grid">
   <div class="card kpi"><span>Entrada prevista (salário)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
   <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta · clique 2 vezes para editar</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
-  <div class="scroll"><table><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
+  <div class="scroll"><table class="simt"><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
   <div class="card" style="margin-top:14px"><h2>Gastos × Disponível${sobra < 0 ? ' · gastos acima da entrada' : ''}</h2><div class="chart" style="height:320px"><canvas id="cs"></canvas></div></div>`;
 }
 
@@ -231,7 +243,7 @@ function catsV() {
 }
 
 function loginV() {
-  return `<div class="login card"><div class="lg">💰</div><h1>Oliveira <b>Finance</b> App</h1><p>Entre para acessar seu controle financeiro.</p>
+  return `<div class="login card"><div class="lg">💰</div><h1>Oliveira <b>Finance</b> App</h1><p>Entre para acessar o controle financeiro da família.</p>
   <input id="nm" placeholder="Seu nome (só para criar conta)" autocomplete="name"><input id="em" type="email" placeholder="E-mail" autocomplete="username"><input id="pw" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password">
   <button class="b" data-act="login">Entrar</button><button class="x" data-act="signup">Criar conta com e-mail</button></div>`;
 }
@@ -292,6 +304,7 @@ function render() {
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
   if (viewing && view === 'share') view = 'home';
   $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV }[view]();
+  Object.entries(drf).forEach(([k, v]) => { const el = $('#' + k); if (el && el.tagName !== 'DIV') el.value = v; });
   post?.();
   if (viewing) $('#main').querySelectorAll('input,select,[data-act]').forEach(el => { if (el.dataset.act !== 'backmine') el.disabled = true; });
 }
@@ -321,10 +334,10 @@ const ACT = {
     if (lost) alert(`${lost} parcela(s) passariam de dezembro e não foram criadas.`);
     pform = false;
   },
-  pullprev() {
+  pullprev(d0) {
     if (mi === 0) return alert('Não há mês anterior.');
     const m = M(mi), pv = M(mi - 1).inst, ct = S.cats.find(c => c.name === 'Parcelados') || S.cats.find(c => !c.saving), p2 = n => String(n).padStart(2, '0'), t = new Date();
-    const d = t.getMonth() === mi ? `${t.getFullYear()}-${p2(mi + 1)}-${p2(t.getDate())}` : `2026-${p2(mi + 1)}-01`, novos = pv.filter(x => !m.tx.some(y => y.from === x.id));
+    const d = t.getMonth() === mi ? `${t.getFullYear()}-${p2(mi + 1)}-${p2(t.getDate())}` : `2026-${p2(mi + 1)}-01`, novos = pv.filter(x => (!d0?.id || x.id === d0.id) && !m.tx.some(y => y.from === x.id));
     if (!novos.length) return alert(pv.length ? 'As parcelas do mês anterior já foram puxadas.' : 'O mês anterior não tem parcelas planejadas.');
     novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: x.valor, pag: x.pag, cat: ct?.id, desc: x.desc, from: x.id }));
   },
@@ -353,7 +366,7 @@ const ACT = {
   }
 };
 const goto = v => { if (v === 'mes') { open = true; mi = ACTM(); } view = v; if (v === 'share' && user) loadShared().then(render); };
-const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; } };
+const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
 $('#main').ondragover = e => { if (drag) e.preventDefault(); };
@@ -363,7 +376,8 @@ $('#main').ondrop = e => {
 };
 $('#main').onclick = e => {
   const u = e.target.closest('[data-ui]'); if (u) { UI[u.dataset.ui](u.dataset); render(); return; }
-  const a = e.target.closest('[data-act]'); if (!a || (viewing && a.dataset.act !== 'backmine')) return; ACT[a.dataset.act](a.dataset); save(); render(); };
+  const a = e.target.closest('[data-act]'); if (!a || (viewing && a.dataset.act !== 'backmine')) return;
+  if (/^add/.test(a.dataset.act)) drf = {}; ACT[a.dataset.act](a.dataset); save(); render(); };
 $('#main').onchange = e => {
   const t = e.target, f = t.dataset.f; if (!f) return; if (viewing) return render();
   const g = S.dash.find(x => x.id === t.dataset.id), c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
@@ -380,6 +394,7 @@ $('#main').onchange = e => {
   else if (f === 'pname') { const n = +t.dataset.id, old = S.pags[n], nv = t.value.trim() || old; MES.forEach((_, i) => [...M(i).tx, ...M(i).inst].forEach(x => { if (x.pag === old) x.pag = nv; })); S.pags[n] = nv; }
   else if (f === 'gtitle') g.title = t.value;
   else if (f === 'gtype') g.type = t.value;
+  else if (f === 'glbl') g.lbl = t.value;
   else if (f === 'gmetric') g.metric = t.value;
   else if (f === 'gfrom') { g.from = +t.value; g.to = Math.max(g.to, g.from); }
   else if (f === 'gto') { g.to = +t.value; g.from = Math.min(g.from, g.to); }
@@ -407,6 +422,15 @@ $('#bmenu').onclick = async e => {
     m.hidden = true; side();
   } else if (o || x) { m.hidden = true; $('#side').classList.remove('show'); if (o) openOwn(o.dataset.own); else openShared(shared[+x.dataset.sh]); }
 };
+let hl = [];
+const hlClear = () => { hl.forEach(el => el.classList.remove('hl', 'hc')); hl = []; };
+$('#main').onmouseover = e => {
+  const td = e.target.closest('.cgt td'); hlClear(); if (!td) return;
+  const tb = td.closest('table'), i = td.cellIndex;
+  hl = [...td.parentElement.cells, ...[...tb.rows].map(r => r.cells[i]).filter(Boolean)];
+  hl.forEach(el => el.classList.add('hl')); td.classList.add('hc');
+};
+$('#main').onmouseout = e => { if (!e.relatedTarget?.closest?.('.cgt')) hlClear(); };
 $('#burger').onclick = () => $('#side').classList.toggle('show');
 $('#bd').onclick = () => $('#side').classList.remove('show');
 
@@ -424,7 +448,9 @@ $('#main').ondblclick = e => {
   el.onkeydown = ev => { if (ev.key === 'Enter') done(true); if (ev.key === 'Escape') done(false); };
 };
 $('#main').oninput = e => {
-  const t = e.target, p = t.dataset.id && $('#pv_' + t.dataset.id); if (!p) return;
+  const t = e.target, p = t.dataset.id && $('#pv_' + t.dataset.id);
+  if (t.id && !t.dataset.f && /^(INPUT|SELECT)$/.test(t.tagName) && !/^(em|pw|nm)$/.test(t.id)) drf[t.id] = t.value;
+  if (!p) return;
   if (t.dataset.f === 'ccolor') p.style.background = t.value; else if (t.dataset.f === 'cname') p.textContent = t.value || '—';
 };
 Chart.defaults.color = '#8a8a8a';

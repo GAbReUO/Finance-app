@@ -77,3 +77,6 @@ tr.paid td{background:rgba(244,63,94,.16)}
 .warn{color:#facc15}
 .top label{font-size:15px}.top input[type=number]{font-size:18px;font-weight:600;padding:8px 10px;width:190px;max-width:100%}
 @media(max-width:720px){.sub button{font-size:15px;padding:8px 10px}}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);cursor:pointer}
+@media(hover:hover){.cgt td.hl,.cgt th.hl{background:rgba(255,255,255,.07)}.cgt td.hc{background:rgba(34,197,94,.3);color:#fff}}
+@media(min-width:721px){.simt{width:100%;max-width:720px;margin:0 auto}}
