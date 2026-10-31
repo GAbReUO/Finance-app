@@ -6,12 +6,16 @@ const $ = s => document.querySelector(s);
 const brl = v => (+v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const uid = () => Math.random().toString(36).slice(2, 9);
-function wk(i) { let n = 0; for (let d = 1; d <= new Date(2026, i + 1, 0).getDate(); d++) if (new Date(2026, i, d).getDay() === 1) n++; return n; }
+let YR = 2026;
+const MY = (y, i) => ((y === 2027 ? (S.m27 ??= {}) : S.months)[i] ??= { saldo: 0, tx: [], inst: [] });
+const inY = (y, f) => { const o = YR; YR = y; try { return f(); } finally { YR = o; } };
+const carry = () => YR === 2027 ? inY(2026, () => sum(MES.map((_, i) => i), i => calc(i).sav)) : 0;
+function wk(i) { let n = 0; for (let d = 1; d <= new Date(YR, i + 1, 0).getDate(); d++) if (new Date(YR, i, d).getDay() === 1) n++; return n; }
 function sal(i) {
-  const m = S.months?.[i]; if (!m) return 0; const f = x => +x || 0;
+  const m = (YR === 2027 ? S.m27 : S.months)?.[i]; if (!m) return 0; const f = x => +x || 0;
   return m.modo === 'quinzenal' ? f(m.q1) + f(m.q2) : m.modo === 'semanal' ? f(m.nsem ?? wk(i)) * f(m.vsem) : f(m.saldo);
 }
-function ACTM() { let r = new Date().getMonth(); for (let i = 0; i < 12; i++) if (sal(i) > 0) r = i; return r; }
+function ACTM() { let r = -1; for (let i = 0; i < 12; i++) if (sal(i) > 0) r = i; return r >= 0 ? r : YR === 2026 ? new Date().getMonth() : -1; }
 const ERR = e => ({ 'auth/invalid-credential': 'E-mail ou senha incorretos.', 'auth/email-already-in-use': 'Este e-mail já tem conta.', 'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.', 'auth/invalid-email': 'E-mail inválido.' }[e.code] || e.message);
 const DEF = () => ({
   cats: [['Alimentação', '#f59e0b'], ['Transporte', '#3b82f6'], ['Reserva', '#22c55e', 1], ['Parcelados', '#8b5cf6'],
@@ -24,11 +28,11 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = ACTM(), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, ppick = false, drf = {}, charts = [], post = null, fb = null, user = null, timer;
-const M = i => (S.months[i] ??= { saldo: 0, tx: [], inst: [] });
+let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, ppick = false, spick = false, simMi, drf = {}, charts = [], post = null, fb = null, user = null, timer;
+const M = i => MY(YR, i);
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
 const calc = i => {
@@ -82,7 +86,7 @@ async function initFb() {
     if (us) {
       try {
         const s = await fb.getDoc(fb.doc(fb.db, 'users', us.uid, 'app', 'state'));
-        if (s.exists()) { S = load(s.data(), 'state'); bnames.state = S.nome; mi = ACTM(); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
+        if (s.exists()) { S = load(s.data(), 'state'); bnames.state = S.nome; mi = Math.max(0, ACTM()); localStorage.setItem('fin26', JSON.stringify(S)); status('☁ Dados carregados da nuvem'); }
         else { S.nome ??= 'Base 1'; bnames.state = S.nome; await cloud(); }
       } catch (e) { status('⚠ Erro ao acessar a nuvem: ' + (e.code || e.message), true); }
       userBox();
@@ -94,7 +98,7 @@ async function initFb() {
 
 // ---------- menu ----------
 function side() {
-  document.querySelectorAll('.bn').forEach(e => e.textContent = viewing ? viewing.label + ' · somente leitura' : S.nome || '');
+  document.querySelectorAll('.bn').forEach(e => e.textContent = viewing ? viewing.label + ' · somente leitura · ' + YR : (S.nome || '') + ' · ' + YR);
   const it = (v, l, i) => `<button data-v="${v}" class="${view === v ? 'on' : ''}">${i} <span>${l}</span></button>`;
   $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
@@ -127,7 +131,7 @@ function drawChart(g) {
 }
 function dash() {
   const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]), act = all.filter(x => x.g > 0);
-  const resTot = (+S.res.inicial || 0) + t('sav') - sum(S.res.saidas, x => x.valor);
+  const resTot = (+S.res.inicial || 0) + carry() + t('sav') - sum(S.res.saidas, x => x.valor);
   post = () => S.dash.forEach(drawChart);
   const opt = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${l}</option>`).join('');
   const mo = MES.map((m, i) => [i, m]);
@@ -141,7 +145,7 @@ function dash() {
   const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
     <button class="x" data-act="gup" data-id="${g.id}" title="Mover para cima">▲</button><button class="x" data-act="gdn" data-id="${g.id}" title="Mover para baixo">▼</button><button class="x" data-ui="gedit" data-id="${g.id}" title="Configurar">⚙</button></div>
     ${dedit === g.id ? panel(g) : ''}<div class="chart"><canvas id="ch_${g.id}"></canvas></div></div>`;
-  return `<h1>Dashboard</h1><div class="grid">${kpi('Salário no ano', t('saldo'))}${kpi('Gastos no ano', t('g'))}${kpi('Reservado em 2026', t('sav'))}${kpi('Reserva total', resTot)}${kpi('Média mensal de gastos', act.length ? t('g') / act.length : 0)}${kpi('Disponível no ano', t('disp'), sgn(t('disp')))}</div>
+  return `<h1>Dashboard</h1><div class="grid">${kpi('Salário no ano', t('saldo'))}${kpi('Gastos no ano', t('g'))}${kpi('Reservado em ' + YR, t('sav'))}${kpi('Reserva total', resTot)}${kpi('Média mensal de gastos', act.length ? t('g') / act.length : 0)}${kpi('Disponível no ano', t('disp'), sgn(t('disp')))}</div>
   <div class="bar"><span style="color:var(--mut)">Arraste ⠿ ou use ▲▼ para reordenar · ⚙ para editar e filtrar</span><button class="b" data-act="gadd">+ Gráfico</button></div>
   <div class="charts">${S.dash.map(card).join('')}</div>`;
 }
@@ -161,8 +165,8 @@ function mes() {
     : `<label>Saldo inicial (R$) ${num('saldo', m.saldo)}</label>`;
   post = () => {
     donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0), 'pct');
-    const p2 = n => String(n).padStart(2, '0'), nd = new Date(2026, mi + 1, 0).getDate();
-    const dl = [...new Set([...Array.from({ length: nd }, (_, i) => `2026-${p2(mi + 1)}-${p2(i + 1)}`), ...m.tx.map(x => x.date).filter(Boolean)])].sort();
+    const p2 = n => String(n).padStart(2, '0'), nd = new Date(YR, mi + 1, 0).getDate();
+    const dl = [...new Set([...Array.from({ length: nd }, (_, i) => `${YR}-${p2(mi + 1)}-${p2(i + 1)}`), ...m.tx.map(x => x.date).filter(Boolean)])].sort();
     const ds = S.cats.filter(k => !k.saving).map(k => ({ label: k.name, backgroundColor: k.color, data: dl.map(d => sum(m.tx.filter(x => x.cat === k.id && x.date === d), x => x.valor)) })).filter(d => d.data.some(v => v));
     charts.push(new Chart($('#cd'), { type: 'bar', data: { labels: dl.map(d => d.slice(8) + '/' + d.slice(5, 7)), datasets: ds }, options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       scales: { x: { stacked: true, title: { display: true, text: 'Data' } }, y: { stacked: true, ticks: { callback: v => brl(v) } } },
@@ -177,14 +181,17 @@ function mes() {
   const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n" data-e="inst:valor:${x.id}">${brl(x.valor)}</td><td data-e="inst:pag:${x.id}">${esc(x.pag)}</td><td data-e="inst:desc:${x.id}" title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
   const aPagar = sum(m.inst.filter(x => !x.pago), x => x.valor);
   const pfm = pform ? `<div class="gs"><div class="row"><input id="pv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="pt"><option value="cada">de cada parcela</option><option value="total">total (dividir)</option></select><select id="pg2">${popt}</select><input id="pn" type="number" min="1" max="12" placeholder="Parcelas" style="width:100px"></div>
-    <div class="row"><input id="pd" placeholder="Descrição (ex.: Viagem)" style="flex:1;min-width:140px"><button class="b" data-act="addparc">Criar parcelas</button></div><small>Começa em ${MES[mi]} e segue pelos meses seguintes, até dezembro.</small></div>` : '';
-  const ppl = mi > 0 ? M(mi - 1).inst.filter(x => !m.tx.some(y => y.from === x.id)) : [];
-  const ppanel = `<div class="gs">${ppl.length ? ppl.map(x => `<div><button class="x" data-act="pullprev" data-id="${x.id}">+ ${esc(x.desc)} · ${brl(x.valor)} · ${esc(x.pag)}</button></div>`).join('') : '<small>Nenhuma parcela pendente do mês anterior.</small>'}</div>`;
-  return `<h1>${MES[mi]} 2026</h1>
+    <div class="row"><input id="pd" placeholder="Descrição (ex.: Viagem)" style="flex:1;min-width:140px"><button class="b" data-act="addparc">Criar parcelas</button></div><small>Começa em ${MES[mi]} e segue pelos meses seguintes, até dezembro de 2027.</small></div>` : '';
+  const pm = mi > 0 ? M(mi - 1) : YR === 2027 ? MY(2026, 11) : null, ppl = pm ? pm.inst.filter(x => !m.tx.some(y => y.from === x.id)) : [];
+  const spl = S.sim.itens.filter(x => x.on !== false && !m.tx.some(y => y.from === 'sim:' + x.id));
+  const pk = (l, act, arr, f) => `<div class="gs">${arr.length ? `<div><button class="x" data-act="${act}"><b>Todas</b> (${arr.length})</button></div>` + arr.map(x => `<div><button class="x" data-act="${act}" data-id="${x.id}">+ ${f(x)}</button></div>`).join('') : `<small>${l}</small>`}</div>`;
+  const ppanel = pk('Nenhuma parcela pendente do mês anterior.', 'pullprev', ppl, x => `${esc(x.desc)} · ${brl(x.valor)} · ${esc(x.pag)}`);
+  const spanel = pk('Nada pendente na simulação (só itens marcados em "Usar").', 'pullsim', spl, x => `${esc(x.desc)} · ${brl(x.valor)}`);
+  return `<h1>${MES[mi]} ${YR}</h1>
   <div class="row top"><div class="row" style="margin:0">${rc}</div><div class="seg">${[['mensal', 'Mensal'], ['quinzenal', 'Quinzenal'], ['semanal', 'Semanal']].map(([k, l]) => `<button data-act="modo" data-m="${k}" class="${md === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
   <div class="grid">${kpi('Saldo inicial', c.saldo)}${kpi('Gastos do mês', c.g)}${kpi('Disponível', c.disp, sgn(c.disp))}${kpi('Reservado', c.sav)}${kpi('Parcelas a pagar mês seguinte', aPagar, 'warn')}</div>
   <div class="cols"><div class="card"><h2>Despesas do mês</h2>
-  <div><button class="x" data-act="pullprev">+ Puxar parcelas mês anterior</button><button class="x" data-ui="pp">${ppick ? '✕ Fechar' : '+ Puxar parcela específica'}</button></div>${ppick ? ppanel : ''}
+  <div><button class="x" data-ui="pp">${ppick ? '✕ Fechar' : '+ Puxar parcelas mês anterior'}</button><button class="x" data-ui="ps">${spick ? '✕ Fechar' : '+ Puxar simulação'}</button></div>${ppick ? ppanel : ''}${spick ? spanel : ''}
   <div class="row"><input id="nd" type="date" value="${new Date().toISOString().slice(0, 10)}"><input id="nv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="np">${popt}</select><select id="nc">${copt}</select><input id="ni" placeholder="Descrição" style="flex:1;min-width:140px"><button class="b" data-act="addtx">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Pagamento</th><th>Categoria</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>
   <div><div class="card" style="margin-bottom:14px"><h2>Por categoria</h2><div class="chart" style="height:260px"><canvas id="cm"></canvas></div></div>
@@ -206,14 +213,14 @@ function cg() {
 
 function res() {
   const r = S.res, sav = MES.map((_, i) => calc(i).sav), tot = sum(sav, x => x), sai = sum(r.saidas, x => x.valor);
-  let a = +r.inicial || 0; const acc = sav.map(v => (a += v));
+  let a = (+r.inicial || 0) + carry(); const acc = sav.map(v => (a += v));
   post = () => charts.push(new Chart($('#cr'), { type: 'line',
     data: { labels: MES.map(m => m.slice(0, 3)), datasets: [{ label: 'Reserva acumulada', data: acc, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.15)', fill: true, tension: .3 }] },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.parsed.y) } } }, scales: { y: { ticks: { callback: v => brl(v) } } } } }));
   const rows = r.saidas.map(x => `<tr><td>${x.date ? x.date.split('-').reverse().join('/') : ''}</td><td class="n">${brl(x.valor)}</td><td>${esc(x.desc)}</td><td><button class="x" data-act="delres" data-id="${x.id}">✕</button></td></tr>`).join('');
   return `<h1>Reserva</h1><div class="grid">
   <div class="card kpi"><span>Saldo inicial</span><input type="number" step="0.01" data-f="rinicial" value="${r.inicial || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
-  ${kpi('Guardado em 2026', tot)}${kpi('Saídas da reserva', sai, 'neg')}${kpi('Total atual', (+r.inicial || 0) + tot - sai, 'pos')}</div>
+  ${kpi('Guardado em ' + YR, tot)}${kpi('Saídas da reserva', sai, 'neg')}${kpi('Total atual', (+r.inicial || 0) + carry() + tot - sai, 'pos')}</div>
   <div class="cols"><div class="card"><h2>Reserva acumulada · passe o mouse nos pontos</h2><div class="chart"><canvas id="cr"></canvas></div></div>
   <div class="card"><h2>Saídas da reserva</h2><div class="row"><input id="rd" type="date"><input id="rv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="rn" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addres">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${rows}</table></div></div></div>`;
@@ -223,12 +230,12 @@ function sim() {
   const s = S.sim, prev = sum(s.itens.filter(x => x.on !== false), x => x.valor), sobra = (+s.entrada || 0) - prev;
   const rows = s.itens.map(x => `<tr><td><input type="checkbox" data-f="son" data-id="${x.id}" ${x.on !== false ? 'checked' : ''}></td><td class="w" data-e="sim:desc:${x.id}">${esc(x.desc)}</td><td class="n" data-e="sim:valor:${x.id}">${brl(x.valor)}</td><td><button class="x" data-act="delsim" data-id="${x.id}">✕</button></td></tr>`).join('');
   post = () => donut('#cs', [{ n: 'Gastos previstos', c: '#f43f5e', v: prev }, { n: 'Disponível', c: '#22c55e', v: Math.max(sobra, 0) }].filter(x => x.v > 0), 'pct');
-  return `<h1>Simulação</h1><div class="grid">
+  return `<div class="bar"><h1 style="margin:0">Simulação</h1><select class="mbtn" data-f="simmes">${MES.map((n, i) => `<option value="${i}" ${i === (simMi ?? mi) ? 'selected' : ''}>${n}</option>`).join('')}</select></div><div class="grid">
   <div class="card kpi"><span>Entrada prevista (salário)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
   <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta · clique 2 vezes para editar</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
-  <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
+  <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[simMi ?? mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
   <div class="scroll"><table class="simt"><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
   <div class="card" style="margin-top:14px"><h2>Gastos × Disponível${sobra < 0 ? ' · gastos acima da entrada' : ''}</h2><div class="chart" style="height:320px"><canvas id="cs"></canvas></div></div>`;
 }
@@ -262,11 +269,11 @@ async function openOwn(id) {
     try { const r = await fb.getDoc(dref(user.uid, id)); S = load(r.exists() ? r.data() : {}, id); curId = id; bnames[id] = S.nome; if (!r.exists()) await cloud(); }
     catch (e) { alert('Não foi possível abrir a base: ' + (e.code || e.message)); }
   }
-  view = 'home'; mi = ACTM(); render();
+  view = 'home'; mi = Math.max(0, ACTM()); render();
 }
 async function openShared(x) {
   if (!viewing) await flush();
-  try { const r = await fb.getDoc(dref(x.uid, x.bid)); if (!r.exists()) return alert('Esta base está vazia.'); if (!viewing) mine = S; S = load(r.data(), x.bid); viewing = x; view = 'home'; mi = ACTM(); }
+  try { const r = await fb.getDoc(dref(x.uid, x.bid)); if (!r.exists()) return alert('Esta base está vazia.'); if (!viewing) mine = S; S = load(r.data(), x.bid); viewing = x; view = 'home'; mi = Math.max(0, ACTM()); }
   catch (er) { alert('Sem permissão para abrir esta base: ' + (er.code || er.message)); }
   render();
 }
@@ -283,7 +290,7 @@ async function bmenu(btn) {
   await loadShared();
   const own = ['state', 'state2'].map(id => `<div class="bi ${!viewing && curId === id ? 'on' : ''}"><button data-own="${id}">${esc(bnames[id])}</button><button class="x" data-ren="${id}" title="Renomear">✎</button></div>`).join('');
   const sh = shared === null ? '<small>Não foi possível carregar.</small>' : shared.length ? shared.map((x, i) => `<div class="bi ${viewing && viewing.uid === x.uid && viewing.bid === x.bid ? 'on' : ''}"><button data-sh="${i}">${esc(x.label)} <small>· ${esc(x.owner)}</small></button></div>`).join('') : '<small>Nada compartilhado com você.</small>';
-  m.innerHTML = `<h2>Minhas bases</h2>${own}<h2>Compartilhadas comigo</h2>${sh}`;
+  m.innerHTML = `<div class="seg">${[2026, 2027].map(y => `<button data-yr="${y}" class="${YR === y ? 'on' : ''}">${y}</button>`).join('')}</div><h2>Minhas bases</h2>${own}<h2>Compartilhadas comigo</h2>${sh}`;
   const r = btn.getBoundingClientRect(); m.style.top = r.bottom + 6 + 'px'; m.style.left = Math.max(8, Math.min(r.left, innerWidth - 300)) + 'px'; m.hidden = false;
 }
 const ban = () => `<div class="ban"><span>👁 Você está vendo <b>${esc(viewing.label)}</b> de ${esc(viewing.owner)} · somente leitura</span><button class="b" data-act="backmine">Voltar para minha base</button></div>`;
@@ -319,7 +326,7 @@ const ACT = {
   addinst() { const v = +val('#iv'); if (v) M(mi).inst.push({ id: uid(), valor: v, pag: val('#ip'), desc: val('#id'), pago: false }); },
   delinst(d) {
     const it = M(mi).inst.find(x => x.id === d.id);
-    if (it?.g && confirm('Remover também as parcelas seguintes deste parcelamento?')) MES.forEach((_, i) => { if (i >= mi) M(i).inst = M(i).inst.filter(x => x.g !== it.g); });
+    if (it?.g && confirm('Remover também as parcelas seguintes deste parcelamento?')) [2026, 2027].forEach(y => { if (y >= YR) MES.forEach((_, i) => { if (y > YR || i >= mi) MY(y, i).inst = MY(y, i).inst.filter(x => x.g !== it.g); }); });
     else M(mi).inst = M(mi).inst.filter(x => x.id !== d.id);
   },
   addparc() {
@@ -327,46 +334,54 @@ const ACT = {
     if (!v || !ds) return alert('Informe o valor e a descrição.');
     const per = tot ? Math.floor(v / n * 100) / 100 : v, g = uid(), pag = val('#pg2'); let lost = 0;
     for (let k = 0; k < n; k++) {
-      if (mi + k > 11) { lost++; continue; }
+      const t = mi + k, y = YR + Math.floor(t / 12); if (y > 2027) { lost++; continue; }
       const vl = tot && k === n - 1 ? Math.round((v - per * (n - 1)) * 100) / 100 : per;
-      M(mi + k).inst.push({ id: uid(), valor: vl, pag, desc: `${k + 1}/${n} - ${ds}`, pago: false, g });
+      MY(y, t % 12).inst.push({ id: uid(), valor: vl, pag, desc: `${k + 1}/${n} - ${ds}`, pago: false, g });
     }
-    if (lost) alert(`${lost} parcela(s) passariam de dezembro e não foram criadas.`);
+    if (lost) alert(`${lost} parcela(s) passariam de dezembro de 2027 e não foram criadas.`);
     pform = false;
   },
+  pullsim(d0) {
+    const m = M(mi), p2 = n => String(n).padStart(2, '0'), t = new Date(), d = t.getMonth() === mi && t.getFullYear() === YR ? `${YR}-${p2(mi + 1)}-${p2(t.getDate())}` : `${YR}-${p2(mi + 1)}-01`;
+    const ct = S.cats.find(c => c.name === 'Outros') || S.cats.find(c => !c.saving), pg = S.pags.includes('PIX') ? 'PIX' : S.pags[0];
+    const novos = S.sim.itens.filter(x => x.on !== false && (!d0?.id || x.id === d0.id) && !m.tx.some(y => y.from === 'sim:' + x.id));
+    if (!novos.length) return alert(S.sim.itens.length ? 'Os itens marcados da simulação já foram puxados.' : 'A simulação está vazia.');
+    novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: +x.valor, pag: pg, cat: ct?.id, desc: x.desc, from: 'sim:' + x.id }));
+    if (!d0?.id) spick = false;
+  },
   pullprev(d0) {
-    if (mi === 0) return alert('Não há mês anterior.');
-    const m = M(mi), pv = M(mi - 1).inst, ct = S.cats.find(c => c.name === 'Parcelados') || S.cats.find(c => !c.saving), p2 = n => String(n).padStart(2, '0'), t = new Date();
-    const d = t.getMonth() === mi ? `${t.getFullYear()}-${p2(mi + 1)}-${p2(t.getDate())}` : `2026-${p2(mi + 1)}-01`, novos = pv.filter(x => (!d0?.id || x.id === d0.id) && !m.tx.some(y => y.from === x.id));
+    if (mi === 0 && YR === 2026) return alert('Não há mês anterior.');
+    const m = M(mi), pv = (mi > 0 ? M(mi - 1) : MY(2026, 11)).inst, ct = S.cats.find(c => c.name === 'Parcelados') || S.cats.find(c => !c.saving), p2 = n => String(n).padStart(2, '0'), t = new Date();
+    const d = t.getMonth() === mi && t.getFullYear() === YR ? `${t.getFullYear()}-${p2(mi + 1)}-${p2(t.getDate())}` : `${YR}-${p2(mi + 1)}-01`, novos = pv.filter(x => (!d0?.id || x.id === d0.id) && !m.tx.some(y => y.from === x.id));
     if (!novos.length) return alert(pv.length ? 'As parcelas do mês anterior já foram puxadas.' : 'O mês anterior não tem parcelas planejadas.');
-    novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: x.valor, pag: x.pag, cat: ct?.id, desc: x.desc, from: x.id }));
+    novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: x.valor, pag: x.pag, cat: ct?.id, desc: x.desc, from: x.id })); if (!d0?.id) ppick = false;
   },
   addres() { const v = +val('#rv'); if (v) S.res.saidas.push({ id: uid(), date: val('#rd'), valor: v, desc: val('#rn') }); },
   delres(d) { S.res.saidas = S.res.saidas.filter(x => x.id !== d.id); },
   addsim() { const v = +val('#sv'); if (v) S.sim.itens.push({ id: uid(), desc: val('#sd'), valor: v, on: true }); },
   delsim(d) { S.sim.itens = S.sim.itens.filter(x => x.id !== d.id); },
-  simparc() { M(mi).inst.forEach(x => S.sim.itens.push({ id: uid(), desc: x.desc, valor: +x.valor, on: true })); },
+  simparc() { M(simMi ?? mi).inst.forEach(x => S.sim.itens.push({ id: uid(), desc: x.desc, valor: +x.valor, on: true })); },
   simclear() { if (confirm('Limpar toda a simulação?')) S.sim.itens = []; },
   gadd() { const g = { id: uid(), title: 'Novo gráfico', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 0 }; S.dash.push(g); dedit = g.id; },
   gdel(d) { if (confirm('Remover este gráfico?')) S.dash = S.dash.filter(g => g.id !== d.id); },
   gup(d) { mv(d.id, -1); }, gdn(d) { mv(d.id, 1); },
   modo(d) { M(mi).modo = d.m; },
   addpag() { const n = val('#npg').trim(); if (n && !S.pags.includes(n)) S.pags.push(n); },
-  delpag(d) { const n = S.pags[+d.id]; if (MES.some((_, i) => [...M(i).tx, ...M(i).inst].some(x => x.pag === n))) return alert('Esta forma de pagamento tem lançamentos. Altere-os antes de excluir.'); S.pags.splice(+d.id, 1); },
+  delpag(d) { const n = S.pags[+d.id]; if ([2026, 2027].some(y => MES.some((_, i) => [...MY(y, i).tx, ...MY(y, i).inst].some(x => x.pag === n)))) return alert('Esta forma de pagamento tem lançamentos. Altere-os antes de excluir.'); S.pags.splice(+d.id, 1); },
   addshare() { const e = val('#shr').trim().toLowerCase(), lb = val('#shl').trim() || S.nome; if (!e.includes('@') || e === user.email.toLowerCase() || S.shareEmails.includes(e)) return alert('Informe um e-mail válido, diferente do seu e ainda não compartilhado.'); S.shareEmails.push(e); S.shareLabels[e] = lb; fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { ownerEmail: user.email, ownerName: uname(user), bases: { [curId]: lb } }, { merge: true }).catch(er => alert(ERR(er))); },
   delshare(d) { const e = S.shareEmails.splice(+d.id, 1)[0]; delete S.shareLabels[e]; fb.setDoc(fb.doc(fb.db, 'shared', e, 'from', user.uid), { bases: { [curId]: fb.deleteField() } }, { merge: true }).catch(() => {}); },
   verify() { fb.au.sendEmailVerification(user).then(() => alert('E-mail de verificação enviado. Confira também o spam.')).catch(er => alert(ERR(er))); },
   verified() { user.reload().then(() => user.getIdToken(true)).then(loadShared).then(render).catch(er => alert(ERR(er))); },
   openshare(d) { openShared(shared[+d.i]); },
-  backmine() { S = mine; viewing = null; mine = null; mi = ACTM(); view = 'home'; },
+  backmine() { S = mine; viewing = null; mine = null; mi = Math.max(0, ACTM()); view = 'home'; },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
     if (MES.some((_, i) => M(i).tx.some(x => x.cat === d.id))) return alert('Esta categoria tem lançamentos. Mova-os antes de excluir.');
     S.cats = S.cats.filter(c => c.id !== d.id);
   }
 };
-const goto = v => { if (v === 'mes') { open = true; mi = ACTM(); } view = v; if (v === 'share' && user) loadShared().then(render); };
-const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; } };
+const goto = v => { if (v === 'mes') { open = true; mi = Math.max(0, ACTM()); } view = v; if (v === 'share' && user) loadShared().then(render); };
+const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; spick = false; }, ps: () => { spick = !spick; ppick = false; } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
 $('#main').ondragover = e => { if (drag) e.preventDefault(); };
@@ -391,10 +406,11 @@ $('#main').onchange = e => {
   else if (f === 'son') s.on = t.checked;
   else if (f === 'q1' || f === 'q2' || f === 'vsem') M(mi)[f] = +t.value;
   else if (f === 'nsem') M(mi).nsem = t.value === '' ? undefined : +t.value;
-  else if (f === 'pname') { const n = +t.dataset.id, old = S.pags[n], nv = t.value.trim() || old; MES.forEach((_, i) => [...M(i).tx, ...M(i).inst].forEach(x => { if (x.pag === old) x.pag = nv; })); S.pags[n] = nv; }
+  else if (f === 'pname') { const n = +t.dataset.id, old = S.pags[n], nv = t.value.trim() || old; [2026, 2027].forEach(y => MES.forEach((_, i) => [...MY(y, i).tx, ...MY(y, i).inst].forEach(x => { if (x.pag === old) x.pag = nv; }))); S.pags[n] = nv; }
   else if (f === 'gtitle') g.title = t.value;
   else if (f === 'gtype') g.type = t.value;
   else if (f === 'glbl') g.lbl = t.value;
+  else if (f === 'simmes') simMi = +t.value;
   else if (f === 'gmetric') g.metric = t.value;
   else if (f === 'gfrom') { g.from = +t.value; g.to = Math.max(g.to, g.from); }
   else if (f === 'gto') { g.to = +t.value; g.from = Math.min(g.from, g.to); }
@@ -415,7 +431,8 @@ $('#main').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.
 document.querySelectorAll('.bsw').forEach(b => b.onclick = () => bmenu(b));
 document.addEventListener('click', e => { if (!e.target.closest('#bmenu,.bsw')) $('#bmenu').hidden = true; });
 $('#bmenu').onclick = async e => {
-  const o = e.target.closest('[data-own]'), r = e.target.closest('[data-ren]'), x = e.target.closest('[data-sh]'), m = $('#bmenu');
+  const o = e.target.closest('[data-own]'), r = e.target.closest('[data-ren]'), x = e.target.closest('[data-sh]'), y = e.target.closest('[data-yr]'), m = $('#bmenu');
+  if (y) { YR = +y.dataset.yr; simMi = undefined; mi = Math.max(0, ACTM()); m.hidden = true; render(); return; }
   if (r) {
     const id = r.dataset.ren, n = (prompt('Nome da base:', bnames[id]) || '').trim(); if (!n) return;
     try { await fb.setDoc(dref(user.uid, id), { nome: n }, { merge: true }); bnames[id] = n; if (id === curId) (viewing ? mine : S).nome = n; } catch (er) { alert(ERR(er)); }
