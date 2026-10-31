@@ -117,6 +117,7 @@ const LAB = { id: 'lab', afterDatasetsDraw(ch) {
   }));
 } };
 function drawChart(g) {
+  if (g.type === 'area') g.type = 'line';
   const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
   if (g.type === 'donut' || g.type === 'pie') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), innerWidth >= 720 ? g.lbl : null, g.type === 'pie' ? '0%' : undefined);
@@ -126,7 +127,7 @@ function drawChart(g) {
       options: { indexAxis: 'y', maintainAspectRatio: false, scales: { x: { ticks: { callback: v => brl(v) } }, y: { ticks: { font: { size: 14 } } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.parsed.x) } } } } }));
   }
   if (g.type === 'radar') {
-    const r0 = g.metric === 'resumo';
+    const r0 = false;
     const d0 = r0 ? [['Salário', 'saldo', '#ffffff'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c]) => ({ label, data: ms.map(i => calc(i)[k]), borderColor: c, backgroundColor: c + '33', pointBackgroundColor: c }))
       : [{ label: 'Gasto no período', data: cs.map(k => sum(ms, i => catMonth(k, i))), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.25)', pointBackgroundColor: '#22c55e' }];
     return charts.push(new Chart($(id), { type: 'radar', data: { labels: r0 ? ms.map(i => MES[i].slice(0, 3)) : cs.map(k => k.name), datasets: d0 },
@@ -150,11 +151,11 @@ function dash() {
   const opt = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${l}</option>`).join('');
   const mo = MES.map((m, i) => [i, m]);
   const panel = g => `<div class="gs"><div class="row"><input data-f="gtitle" data-id="${g.id}" value="${esc(g.title)}" placeholder="Título do gráfico" style="flex:1;min-width:140px">
-    <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['area', 'Área'], ['hbar', 'Ranking (barras horizontais)'], ['radar', 'Radar'], ['donut', 'Rosca'], ['pie', 'Pizza']], g.type)}</select>
-    ${!['donut', 'pie', 'hbar'].includes(g.type) ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
+    <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['hbar', 'Ranking (barras horizontais)'], ['radar', 'Radar'], ['donut', 'Rosca'], ['pie', 'Pizza']], g.type)}</select>
+    ${!['donut', 'pie', 'hbar', 'radar'].includes(g.type) ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
     <div class="row"><label>De <select data-f="gfrom" data-id="${g.id}">${opt(mo, g.from)}</select></label><label>até <select data-f="gto" data-id="${g.id}">${opt(mo, g.to)}</select></label>
     <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${['donut', 'pie'].includes(g.type) ? `<label>Rótulos (PC) <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
-    ${['donut', 'pie', 'hbar'].includes(g.type) || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
+    ${['donut', 'pie', 'hbar', 'radar'].includes(g.type) || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
     <div class="row" style="margin:10px 0 0"><button class="x" data-act="gdel" data-id="${g.id}">🗑 Remover gráfico</button></div></div>`;
   const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
     <button class="x" data-act="gup" data-id="${g.id}" title="Mover para cima">▲</button><button class="x" data-act="gdn" data-id="${g.id}" title="Mover para baixo">▼</button><button class="x" data-ui="gedit" data-id="${g.id}" title="Configurar">⚙</button></div>
@@ -335,13 +336,13 @@ function parcV() {
   const body = rows.map((g, r) => {
     const end = g.start + g.n - 1, a = Math.max(g.start, 0), b = Math.min(end, 23);
     const segs = Array.from({ length: b - a + 1 }, (_, j) => { const idx = a + j, it = g.at[idx], k = idx - g.start + 1; return `<span class="${it?.pago ? 'pg' : ''}" title="${esc(g.desc)} · parcela ${k}/${g.n}${it ? ' · ' + brl(it.valor) : ''}">${it?.pago ? '✓ ' : ''}${k}/${g.n}</span>`; }).join('');
-    return `<div class="gr"><div class="gl"><b>${esc(g.desc)}</b><small>${g.n}x · ${lbl(g.start)} → ${lbl(end)}</small></div><div class="gln">${cells(() => '')}</div><div class="gbar" style="grid-column:${a + 2} / span ${b - a + 1};background:${PAL[r % PAL.length]}">${segs}</div></div>`;
+    return `<div class="gr" style="--r:${r + 3}"><div class="gl"><b>${esc(g.desc)}</b><small>${g.n}x · ${lbl(g.start)} → ${lbl(end)}</small></div><div class="gln">${cells(() => '')}</div><div class="gbar" style="grid-column:${a + 2} / span ${b - a + 1};background:${PAL[r % PAL.length]}">${segs}</div></div>`;
   }).join('');
-  return `<h1>Parcelamentos</h1><div class="card scroll"><div class="gantt">
-  <div class="gr gy"><div class="gl"></div><div class="gln" style="grid-template-columns:1fr 1fr"><div>2026</div><div>2027</div></div></div>
-  <div class="gr gh"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
+  return `<h1>Parcelamentos</h1><div class="card scroll" style="padding:0"><div class="gantt">
+  <div class="gr gy" style="--r:1"><div class="gl"></div><div class="gln" style="grid-template-columns:1fr 1fr"><div>2026</div><div>2027</div></div></div>
+  <div class="gr gh" style="--r:2"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
   ${body || '<div style="padding:18px;color:var(--mut)">Nenhum parcelamento encontrado. Eles aparecem aqui quando a descrição está no formato "x/y - Descrição".</div>'}
-  <div class="gr gt"><div class="gl">Total do mês</div><div class="gln">${cells(c => tot[c] ? Math.round(tot[c]).toLocaleString('pt-BR') : '')}</div></div></div></div>
+  <div class="gr gt" style="--r:${rows.length + 3}"><div class="gl">Total do mês</div><div class="gln">${cells(c => tot[c] ? Math.round(tot[c]).toLocaleString('pt-BR') : '')}</div></div></div></div>
   <p style="color:var(--mut);font-size:13px">Cada barra vai da 1ª à última parcela, com o número da parcela em cada mês. ✓ = parcela marcada como paga. O mês destacado é o mês ativo. Passe o mouse (ou toque) para ver o valor.</p>`;
 }
 

@@ -82,11 +82,12 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);cursor:poin
 @media(min-width:721px){.simt{width:100%;max-width:920px;margin:0 auto}.simt th,.simt td{padding-left:28px;padding-right:28px}}
 select.mbtn{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer}
 #bmenu .seg{margin:4px 6px 8px}#bmenu .seg button{flex:1}
-.gantt{--gt:230px repeat(24,minmax(52px,1fr));min-width:calc(230px + 24*52px)}
-.gr{display:grid;grid-template-columns:var(--gt);align-items:center;border-bottom:1px solid var(--line);min-height:46px}.gr>*{grid-row:1}
-.gl{grid-column:1;position:sticky;left:0;z-index:3;background:var(--card);padding:6px 10px;display:flex;flex-direction:column;align-self:stretch;justify-content:center}.gl small{color:var(--mut)}
-.gln{grid-column:2/-1;display:grid;grid-template-columns:repeat(24,1fr);align-self:stretch}
+.gantt{--lw:230px;--cw:52px;--gt:var(--lw) repeat(24,minmax(var(--cw),1fr));display:grid;grid-template-columns:var(--gt);grid-auto-rows:minmax(46px,auto);min-width:calc(var(--lw) + 24*var(--cw))}
+.gr{display:contents}.gr>*{grid-row:var(--r)}
+.gl{grid-column:1;position:sticky;left:0;z-index:3;background:var(--card);padding:6px 10px;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}.gl small{color:var(--mut)}
+.gln{grid-column:2/-1;display:grid;grid-template-columns:repeat(24,1fr);border-bottom:1px solid var(--line)}
 .gln>div{border-left:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--mut)}.gln>div.cur{background:rgba(34,197,94,.12)}
 .gh .gln>div,.gy .gln>div{color:var(--tx);font-weight:600}.gy .gln>div{font-size:14px}.gt .gln>div{font-size:11px;color:var(--tx)}
-.gbar{z-index:2;display:flex;height:30px;border-radius:7px;overflow:hidden;align-self:center;margin:0 2px;color:#fff;font-weight:600;font-size:12px}
+.gbar{z-index:2;display:flex;height:30px;border-radius:7px;overflow:hidden;align-self:center;margin:0;color:#fff;font-weight:600;font-size:12px}
 .gbar span{flex:1;display:flex;align-items:center;justify-content:center;border-left:1px solid rgba(0,0,0,.25);white-space:nowrap}.gbar span:first-child{border-left:0}.gbar span.pg{background:rgba(0,0,0,.35)}
+@media(max-width:720px){.gantt{--lw:118px;--cw:64px}.gl{padding:6px 8px}.gl b{font-size:13px}.gl small{font-size:11px}.gbar{font-size:13px}}
