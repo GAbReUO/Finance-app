@@ -28,10 +28,10 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, ppick = false, spick = false, simMi, drf = {}, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, charts = [], post = null, fb = null, user = null, timer;
 const M = i => MY(YR, i);
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -103,7 +103,7 @@ function side() {
   $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
     (open ? `<div class="sub">${MES.map((n, i) => `<button data-m="${i}" class="${view === 'mes' && mi === i ? 'on' : ''} ${i === ACTM() ? 'now' : ''}">${n}</button>`).join('')}</div>` : '') +
-    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('parc', 'Parcelamentos', '📆') + it('cats', 'Categorias', '🏷️') + (viewing ? '' : it('share', 'Compartilhar', '🤝'));
+    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('parc', 'Parcelamentos', '📆') + it('plan', 'Planejamento', '🎯') + it('cats', 'Categorias', '🏷️') + (viewing ? '' : it('share', 'Compartilhar', '🤝'));
 }
 
 // ---------- telas ----------
@@ -167,7 +167,7 @@ function dash() {
 
 function home() {
   const T = [['dash', '📊', 'Dashboard', 'O ano em gráficos que você monta e filtra.'], ['mes', '🗓️', 'Mês', 'Gastos, saldo e parcelas do mês.'], ['cg', '📋', 'Controle Geral', 'Todos os meses lado a lado, por categoria.'],
-    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['parc', '📆', 'Parcelamentos', 'Linha do tempo de todas as parcelas.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
+    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['parc', '📆', 'Parcelamentos', 'Linha do tempo de todas as parcelas.'], ['plan', '🎯', 'Planejamento', 'Calcule e acompanhe planos de economia.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
   return `<h1>Olá${user ? ', ' + esc(uname(user)) : ''} 👋</h1>
   <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne o controle financeiro da família: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
   <div class="tiles">${T.map(([v, i, n, d]) => `<button class="card tile" data-ui="go" data-v="${v}"><span class="ti">${i}</span><b>${n}</b><small>${d}</small></button>`).join('')}</div>`;
@@ -325,8 +325,8 @@ function parcV() {
   const re = /^\s*(\d+)\s*\/\s*(\d+)\s*-\s*(.+?)\s*$/, G = new Map(), tot = Array(24).fill(0), mo = (y, i) => (y === 2027 ? S.m27 : S.months)?.[i];
   [2026, 2027].forEach((y, yi) => MES.forEach((_, i) => (mo(y, i)?.inst || []).forEach(x => {
     const m = re.exec(x.desc || ''); if (!m) return;
-    const k = +m[1], n = +m[2], idx = yi * 12 + i, key = x.g || m[3].toLowerCase() + '|' + n, g = G.get(key) || { desc: m[3], n, start: 1e9, at: {} };
-    g.start = Math.min(g.start, idx - (k - 1)); g.at[idx] = x; tot[idx] += +x.valor || 0; G.set(key, g);
+    const k = +m[1], n = +m[2], idx = yi * 12 + i + 1, key = x.g || m[3].toLowerCase() + '|' + n, g = G.get(key) || { desc: m[3], n, start: 1e9, at: {} };
+    g.start = Math.min(g.start, idx - (k - 1)); g.at[idx] = x; if (idx < 24) tot[idx] += +x.valor || 0; G.set(key, g);
   })));
   const rows = [...G.values()].filter(g => g.start + g.n - 1 >= 0 && g.start <= 23).sort((a, b) => a.start - b.start || a.desc.localeCompare(b.desc));
   const a7 = inY(2027, ACTM), cur = a7 >= 0 ? 12 + a7 : inY(2026, ACTM);
@@ -343,14 +343,49 @@ function parcV() {
   <div class="gr gh" style="--r:2"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
   ${body || '<div style="padding:18px;color:var(--mut)">Nenhum parcelamento encontrado. Eles aparecem aqui quando a descrição está no formato "x/y - Descrição".</div>'}
   <div class="gr gt" style="--r:${rows.length + 3}"><div class="gl">Total do mês</div><div class="gln">${cells(c => tot[c] ? Math.round(tot[c]).toLocaleString('pt-BR') : '')}</div></div></div></div>
-  <p style="color:var(--mut);font-size:13px">Cada barra vai da 1ª à última parcela, com o número da parcela em cada mês. ✓ = parcela marcada como paga. O mês destacado é o mês ativo. Passe o mouse (ou toque) para ver o valor.</p>`;
+  <p style="color:var(--mut);font-size:13px">Cada coluna mostra a parcela paga naquele mês (o que você lança em “Próximo mês · parcelas” aparece no mês seguinte). ✓ = parcela marcada como paga. O mês destacado é o mês ativo. Passe o mouse (ou toque) para ver o valor.</p>`;
+}
+
+const newPlan = () => ({ nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] });
+const curIdx = () => { const a7 = inY(2027, ACTM); return a7 >= 0 ? 12 + a7 : inY(2026, ACTM); };
+function planCalc(p) {
+  const P = +p.inicial || 0, n = Math.min(600, Math.max(0, Math.floor(+p.meses || 0))), V = +p.valor || 0, r = (+p.juros || 0) / 100, ser = [P]; let b = P;
+  for (let i = 1; i <= n; i++) { b = b * (1 + r) + V; ser.push(b); }
+  return { ser, fim: b, inv: P + V * n, jur: b - (P + V * n), n, P, V };
+}
+function planRes(p = plan) {
+  const c = planCalc(p);
+  return `<div class="grid">${kpi('Você terá ao final', c.fim, 'pos')}${kpi('Total aportado', c.inv)}${+p.juros > 0 ? kpi('Juros acumulados', c.jur, 'pos') : ''}</div>`;
+}
+function planV() {
+  const p = plan, c = planCalc(p), cur = curIdx(), mk = [...p.marc].sort((a, b) => a - b), lb = i => MES[i % 12].slice(0, 3).toUpperCase() + ' ' + (2026 + Math.floor(i / 12));
+  post = () => charts.push(new Chart($('#plc'), { type: 'line', data: { labels: c.ser.map((_, i) => i), datasets: [
+    { label: 'Saldo acumulado', data: c.ser, borderColor: p.cor, backgroundColor: p.cor + '33', fill: true, tension: .2, pointRadius: 2 },
+    { label: 'Total aportado', data: c.ser.map((_, i) => c.P + c.V * i), borderColor: '#a3a3a3', borderDash: [5, 5], pointRadius: 0 }] },
+    options: { maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Meses' } }, y: { ticks: { callback: v => brl(v) } } }, plugins: { legend: { labels: { font: { size: 14 } } }, tooltip: { callbacks: { label: x => `${x.dataset.label}: ${brl(x.parsed.y)}` } } } } }));
+  const inp = (f, l, ph) => `<label>${l}<input type="number" step="0.01" data-f="pl_${f}" value="${p[f] ?? ''}" placeholder="${ph}"></label>`;
+  const dots = [0, 1].map(y => `<div class="dy">${2026 + y}</div><div class="drow">${MES.map((m, i) => { const k = y * 12 + i; return `<button class="dotb ${p.marc.includes(k) ? 'on' : ''}" data-ui="pdot" data-m="${k}"><i></i><span>${m.slice(0, 3).toUpperCase()}</span></button>`; }).join('')}</div>`).join('');
+  const saved = S.plans.map(q => {
+    const k = planCalc(q), m2 = [...q.marc].sort((a, b) => a - b), done = m2.filter(m => m <= cur).length;
+    return `<div class="card plc" style="border-left:6px solid ${esc(q.cor)}"><div class="bar"><h2 style="margin:0">${esc(q.nome)}</h2><span><button class="x" data-ui="plopen" data-id="${q.id}">✎ Abrir</button><button class="x" data-act="pldel" data-id="${q.id}">🗑</button></span></div>
+    <p style="color:var(--mut);margin:6px 0">${brl(+q.inicial || 0)} + ${brl(+q.valor || 0)} × ${q.meses} meses${+q.juros ? ` · juros de ${q.juros}% ao mês` : ''}</p><b style="font-size:20px;color:var(--g)">${brl(k.fim)}</b>
+    ${m2.length ? `<div style="margin-top:8px;color:var(--mut)">${lb(m2[0])} até ${lb(m2[m2.length - 1])} · mês ${done}/${m2.length}${done ? ` · deveria ter ${brl(k.ser[Math.min(done, k.n)])}` : ' · ainda não começou'}<div class="pgb"><i style="width:${Math.round(done / m2.length * 100)}%;background:${esc(q.cor)}"></i></div></div>` : ''}</div>`;
+  }).join('');
+  return `<h1>Planejamento</h1><div class="card" style="--pc:${esc(p.cor)}"><h2>Calcular um plano</h2>
+  <div class="plf">${inp('inicial', 'Valor inicial (R$)', '0,00')}${inp('meses', 'Quantidade de meses', '12')}${inp('valor', 'Valor por mês (R$)', '0,00')}${inp('juros', 'Juros ao mês (%) · opcional', '0')}</div>
+  <h2 style="margin-top:18px">Meses do plano · opcional</h2>${dots}<p style="color:var(--mut)">${mk.length ? `${lb(mk[0])} até ${lb(mk[mk.length - 1])} · ${mk.length} ${mk.length === 1 ? 'mês marcado' : 'meses marcados'}${mk.length !== c.n && c.n ? ` (o plano tem ${c.n})` : ''}` : 'Nenhum mês marcado.'}</p>
+  <div id="plr">${planRes()}</div><div class="chart" style="margin-top:14px"><canvas id="plc"></canvas></div>
+  <p style="color:var(--mut);font-size:13px">Cálculo: valor inicial + valor por mês × meses. Com juros, o saldo rende a % ao mês e o valor mensal entra no fim de cada mês.</p>
+  <div class="plf" style="align-items:flex-end;margin-top:8px"><label>Nome do plano<input data-f="pl_nome" value="${esc(p.nome)}" placeholder="Ex.: Viagem 2027" style="width:240px"></label><label>Cor<input type="color" data-f="pl_cor" value="${esc(p.cor)}"></label>
+  <button class="b" data-act="plsave">${p.id ? 'Atualizar plano' : 'Salvar plano'}</button>${p.id ? '<button class="x" data-act="plsave" data-novo="1">Salvar como novo</button>' : ''}<button class="x" data-ui="plnew">Limpar</button></div></div>
+  <h2 style="margin:18px 0 6px">Planos salvos</h2>${saved || '<p style="color:var(--mut)">Nenhum plano salvo ainda.</p>'}`;
 }
 
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side(); document.body.classList.toggle('lock', !!(fb && !user));
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
   if (viewing && view === 'share') view = 'home';
-  $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV, parc: parcV }[view]();
+  $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV, parc: parcV, plan: planV }[view]();
   Object.entries(drf).forEach(([k, v]) => { const el = $('#' + k); if (el && el.tagName !== 'DIV') el.value = v; });
   post?.();
   if (viewing) $('#main').querySelectorAll('input,select,[data-act]').forEach(el => { if (el.dataset.act !== 'backmine') el.disabled = true; });
@@ -414,6 +449,12 @@ const ACT = {
   verified() { user.reload().then(() => user.getIdToken(true)).then(loadShared).then(render).catch(er => alert(ERR(er))); },
   openshare(d) { openShared(shared[+d.i]); },
   backmine() { S = mine; viewing = null; mine = null; mi = Math.max(0, ACTM()); view = 'home'; },
+  plsave(d) {
+    const nm = (plan.nome || '').trim(); if (!nm) return alert('Dê um nome ao plano.'); if (!(+plan.meses > 0)) return alert('Informe a quantidade de meses.');
+    const id = plan.id && !d.novo ? plan.id : uid(), q = JSON.parse(JSON.stringify({ ...plan, nome: nm, id })), i = S.plans.findIndex(x => x.id === id);
+    if (i < 0) S.plans.push(q); else S.plans[i] = q; plan = JSON.parse(JSON.stringify(q));
+  },
+  pldel(d) { if (confirm('Excluir este plano?')) { S.plans = S.plans.filter(x => x.id !== d.id); if (plan.id === d.id) plan.id = null; } },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
     if (MES.some((_, i) => M(i).tx.some(x => x.cat === d.id))) return alert('Esta categoria tem lançamentos. Mova-os antes de excluir.');
@@ -421,7 +462,10 @@ const ACT = {
   }
 };
 const goto = v => { if (v === 'mes') { open = true; mi = Math.max(0, ACTM()); } view = v; if (v === 'share' && user) loadShared().then(render); };
-const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; spick = false; }, ps: () => { spick = !spick; ppick = false; } };
+const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; spick = false; }, ps: () => { spick = !spick; ppick = false; },
+  pdot: d => { const a = plan.marc, m = +d.m, i = a.indexOf(m); i < 0 ? a.push(m) : a.splice(i, 1); },
+  plnew: () => { plan = newPlan(); },
+  plopen: d => { const q = S.plans.find(x => x.id === d.id); if (q) { plan = JSON.parse(JSON.stringify(q)); scrollTo({ top: 0 }); } } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
 $('#main').ondragover = e => { if (drag) e.preventDefault(); };
@@ -435,6 +479,7 @@ $('#main').onclick = e => {
   if (/^add/.test(a.dataset.act)) drf = {}; ACT[a.dataset.act](a.dataset); save(); render(); };
 $('#main').onchange = e => {
   const t = e.target, f = t.dataset.f; if (!f) return; if (viewing) return render();
+  if (f.startsWith('pl_')) { plan[f.slice(3)] = t.value; return render(); }
   const g = S.dash.find(x => x.id === t.dataset.id), c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
   if (f === 'saldo') M(mi).saldo = +t.value;
   else if (f === 'pago') i.pago = t.checked;
@@ -507,6 +552,7 @@ $('#main').ondblclick = e => {
 $('#main').oninput = e => {
   const t = e.target, p = t.dataset.id && $('#pv_' + t.dataset.id);
   if (t.id && !t.dataset.f && /^(INPUT|SELECT)$/.test(t.tagName) && !/^(em|pw|nm)$/.test(t.id)) drf[t.id] = t.value;
+  if (t.dataset.f?.startsWith('pl_')) { plan[t.dataset.f.slice(3)] = t.value; const r = $('#plr'); if (r) r.innerHTML = planRes(); return; }
   if (!p) return;
   if (t.dataset.f === 'ccolor') p.style.background = t.value; else if (t.dataset.f === 'cname') p.textContent = t.value || '—';
 };
