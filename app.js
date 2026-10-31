@@ -51,11 +51,11 @@ const dlab = mode => ({ id: 'dlab', afterDatasetsDraw(ch) {
     x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.7)'; x.fillStyle = '#fff'; x.strokeText(t, p.x, p.y); x.fillText(t, p.x, p.y); x.restore();
   });
 } });
-const donut = (id, items, mode) => charts.push(new Chart($(id), {
+const donut = (id, items, mode, cut) => charts.push(new Chart($(id), {
   plugins: mode ? [dlab(mode)] : [],
   type: 'doughnut',
   data: { labels: items.map(x => x.n), datasets: [{ data: items.map(x => x.v), backgroundColor: items.map(x => x.c), borderColor: '#141414' }] },
-  options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
+  options: { maintainAspectRatio: false, cutout: cut || '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
@@ -103,7 +103,7 @@ function side() {
   $('#nav').innerHTML = it('home', 'Início', '🏠') + it('dash', 'Dashboard', '📊') +
     `<button data-t="1" class="${view === 'mes' ? 'on' : ''}">🗓️ <span>Mês</span><i>${open ? '▾' : '▸'}</i></button>` +
     (open ? `<div class="sub">${MES.map((n, i) => `<button data-m="${i}" class="${view === 'mes' && mi === i ? 'on' : ''} ${i === ACTM() ? 'now' : ''}">${n}</button>`).join('')}</div>` : '') +
-    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('cats', 'Categorias', '🏷️') + (viewing ? '' : it('share', 'Compartilhar', '🤝'));
+    it('cg', 'Controle Geral', '📋') + it('res', 'Reserva', '💰') + it('sim', 'Simulação', '🧮') + it('parc', 'Parcelamentos', '📆') + it('cats', 'Categorias', '🏷️') + (viewing ? '' : it('share', 'Compartilhar', '🤝'));
 }
 
 // ---------- telas ----------
@@ -119,13 +119,27 @@ const LAB = { id: 'lab', afterDatasetsDraw(ch) {
 function drawChart(g) {
   const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
-  if (g.type === 'donut') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), innerWidth >= 720 ? g.lbl : null);
-  const res = g.metric === 'resumo', bar = g.type !== 'line', all = ms.map(i => calc(i));
+  if (g.type === 'donut' || g.type === 'pie') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), innerWidth >= 720 ? g.lbl : null, g.type === 'pie' ? '0%' : undefined);
+  if (g.type === 'hbar') {
+    const it = cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+    return charts.push(new Chart($(id), { type: 'bar', data: { labels: it.map(x => x.n), datasets: [{ data: it.map(x => x.v), backgroundColor: it.map(x => x.c) }] },
+      options: { indexAxis: 'y', maintainAspectRatio: false, scales: { x: { ticks: { callback: v => brl(v) } }, y: { ticks: { font: { size: 14 } } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.parsed.x) } } } } }));
+  }
+  if (g.type === 'radar') {
+    const r0 = g.metric === 'resumo';
+    const d0 = r0 ? [['Salário', 'saldo', '#ffffff'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c]) => ({ label, data: ms.map(i => calc(i)[k]), borderColor: c, backgroundColor: c + '33', pointBackgroundColor: c }))
+      : [{ label: 'Gasto no período', data: cs.map(k => sum(ms, i => catMonth(k, i))), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.25)', pointBackgroundColor: '#22c55e' }];
+    return charts.push(new Chart($(id), { type: 'radar', data: { labels: r0 ? ms.map(i => MES[i].slice(0, 3)) : cs.map(k => k.name), datasets: d0 },
+      options: { maintainAspectRatio: false, scales: { r: { beginAtZero: true, ticks: { callback: v => brl(v), backdropColor: 'transparent' }, grid: { color: 'rgba(255,255,255,.12)' }, angleLines: { color: 'rgba(255,255,255,.12)' }, pointLabels: { color: Chart.defaults.color, font: { size: 13 } } } },
+        plugins: { legend: { display: r0, position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${brl(c.parsed.r)}` } } } } }));
+  }
+  const res = g.metric === 'resumo', area = g.type === 'area', bar = g.type === 'bar', all = ms.map(i => calc(i));
   const ds = res ? [['Salário', 'saldo', '#ffffff'], ['Gastos', 'g', '#f43f5e'], ['Reserva', 'sav', '#22c55e']].map(([label, k, c, lc]) => ({ label, data: all.map(x => x[k]), backgroundColor: c, borderColor: c, lc: lc || c }))
     : cs.map(k => ({ label: k.name, data: ms.map(i => catMonth(k, i)), backgroundColor: k.color, borderColor: k.color }));
+  if (area) ds.forEach((d, j) => { d.fill = res ? 'origin' : j ? '-1' : 'origin'; d.tension = .3; d.pointRadius = 2; if (/^#[0-9a-f]{6}$/i.test(d.borderColor)) d.backgroundColor = d.borderColor + (res ? '55' : 'aa'); });
   charts.push(new Chart($(id), { type: bar ? 'bar' : 'line', data: { labels: ms.map(i => MES[i].slice(0, 3)), datasets: ds },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      scales: { x: { stacked: bar && !res }, y: { stacked: bar && !res, grace: '15%', ticks: { callback: v => brl(v) } } },
+      scales: { x: { stacked: (bar || area) && !res }, y: { stacked: (bar || area) && !res, grace: '15%', ticks: { callback: v => brl(v) } } },
       plugins: { legend: { position: res ? 'top' : innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } }, tooltip: { callbacks: { label: c => (c.parsed.y || res) ? `${c.dataset.label}: ${brl(c.parsed.y)}` : null } } },
       onClick: (e, els) => { if (res && els.length) { mi = ms[els[0].index]; view = 'mes'; open = true; render(); } } }, plugins: res && innerWidth >= 720 ? [LAB] : [] }));
 }
@@ -136,11 +150,11 @@ function dash() {
   const opt = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${l}</option>`).join('');
   const mo = MES.map((m, i) => [i, m]);
   const panel = g => `<div class="gs"><div class="row"><input data-f="gtitle" data-id="${g.id}" value="${esc(g.title)}" placeholder="Título do gráfico" style="flex:1;min-width:140px">
-    <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['donut', 'Rosca']], g.type)}</select>
-    ${g.type !== 'donut' ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
+    <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['area', 'Área'], ['hbar', 'Ranking (barras horizontais)'], ['radar', 'Radar'], ['donut', 'Rosca'], ['pie', 'Pizza']], g.type)}</select>
+    ${!['donut', 'pie', 'hbar'].includes(g.type) ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
     <div class="row"><label>De <select data-f="gfrom" data-id="${g.id}">${opt(mo, g.from)}</select></label><label>até <select data-f="gto" data-id="${g.id}">${opt(mo, g.to)}</select></label>
-    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${g.type === 'donut' ? `<label>Rótulos (PC) <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
-    ${g.type === 'donut' || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
+    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${['donut', 'pie'].includes(g.type) ? `<label>Rótulos (PC) <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
+    ${['donut', 'pie', 'hbar'].includes(g.type) || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
     <div class="row" style="margin:10px 0 0"><button class="x" data-act="gdel" data-id="${g.id}">🗑 Remover gráfico</button></div></div>`;
   const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
     <button class="x" data-act="gup" data-id="${g.id}" title="Mover para cima">▲</button><button class="x" data-act="gdn" data-id="${g.id}" title="Mover para baixo">▼</button><button class="x" data-ui="gedit" data-id="${g.id}" title="Configurar">⚙</button></div>
@@ -152,7 +166,7 @@ function dash() {
 
 function home() {
   const T = [['dash', '📊', 'Dashboard', 'O ano em gráficos que você monta e filtra.'], ['mes', '🗓️', 'Mês', 'Gastos, saldo e parcelas do mês.'], ['cg', '📋', 'Controle Geral', 'Todos os meses lado a lado, por categoria.'],
-    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
+    ['res', '💰', 'Reserva', 'Quanto você guardou e o que já saiu.'], ['sim', '🧮', 'Simulação', 'Teste contas e veja quanto sobra.'], ['parc', '📆', 'Parcelamentos', 'Linha do tempo de todas as parcelas.'], ['cats', '🏷️', 'Categorias', 'Crie categorias e escolha as cores.'], ['share', '🤝', 'Compartilhar', 'Deixe outras pessoas verem a sua base.']];
   return `<h1>Olá${user ? ', ' + esc(uname(user)) : ''} 👋</h1>
   <div class="card hero"><p>O <b>Oliveira Finance App</b> reúne o controle financeiro da família: registre os gastos de cada mês, acompanhe a reserva, simule as contas do próximo mês e veja tudo em gráficos. Os dados ficam salvos na nuvem, na sua conta.</p></div>
   <div class="tiles">${T.map(([v, i, n, d]) => `<button class="card tile" data-ui="go" data-v="${v}"><span class="ti">${i}</span><b>${n}</b><small>${d}</small></button>`).join('')}</div>`;
@@ -306,11 +320,36 @@ function shareV() {
   <div class="card"><h2>Bases compartilhadas comigo</h2>${sh}</div>`;
 }
 
+function parcV() {
+  const re = /^\s*(\d+)\s*\/\s*(\d+)\s*-\s*(.+?)\s*$/, G = new Map(), tot = Array(24).fill(0), mo = (y, i) => (y === 2027 ? S.m27 : S.months)?.[i];
+  [2026, 2027].forEach((y, yi) => MES.forEach((_, i) => (mo(y, i)?.inst || []).forEach(x => {
+    const m = re.exec(x.desc || ''); if (!m) return;
+    const k = +m[1], n = +m[2], idx = yi * 12 + i, key = x.g || m[3].toLowerCase() + '|' + n, g = G.get(key) || { desc: m[3], n, start: 1e9, at: {} };
+    g.start = Math.min(g.start, idx - (k - 1)); g.at[idx] = x; tot[idx] += +x.valor || 0; G.set(key, g);
+  })));
+  const rows = [...G.values()].filter(g => g.start + g.n - 1 >= 0 && g.start <= 23).sort((a, b) => a.start - b.start || a.desc.localeCompare(b.desc));
+  const a7 = inY(2027, ACTM), cur = a7 >= 0 ? 12 + a7 : inY(2026, ACTM);
+  const PAL = ['#b0486a', '#1f9d6b', '#8e4fb0', '#2f7fd0', '#e08a1e', '#d1495b', '#3aa6a6'];
+  const lbl = i => i < 0 ? 'antes de 2026' : i > 23 ? 'após 2027' : MES[i % 12].slice(0, 3) + '/' + (2026 + Math.floor(i / 12));
+  const cells = f => Array.from({ length: 24 }, (_, c) => `<div class="${c === cur ? 'cur' : ''}">${f(c)}</div>`).join('');
+  const body = rows.map((g, r) => {
+    const end = g.start + g.n - 1, a = Math.max(g.start, 0), b = Math.min(end, 23);
+    const segs = Array.from({ length: b - a + 1 }, (_, j) => { const idx = a + j, it = g.at[idx], k = idx - g.start + 1; return `<span class="${it?.pago ? 'pg' : ''}" title="${esc(g.desc)} · parcela ${k}/${g.n}${it ? ' · ' + brl(it.valor) : ''}">${it?.pago ? '✓ ' : ''}${k}/${g.n}</span>`; }).join('');
+    return `<div class="gr"><div class="gl"><b>${esc(g.desc)}</b><small>${g.n}x · ${lbl(g.start)} → ${lbl(end)}</small></div><div class="gln">${cells(() => '')}</div><div class="gbar" style="grid-column:${a + 2} / span ${b - a + 1};background:${PAL[r % PAL.length]}">${segs}</div></div>`;
+  }).join('');
+  return `<h1>Parcelamentos</h1><div class="card scroll"><div class="gantt">
+  <div class="gr gy"><div class="gl"></div><div class="gln" style="grid-template-columns:1fr 1fr"><div>2026</div><div>2027</div></div></div>
+  <div class="gr gh"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
+  ${body || '<div style="padding:18px;color:var(--mut)">Nenhum parcelamento encontrado. Eles aparecem aqui quando a descrição está no formato "x/y - Descrição".</div>'}
+  <div class="gr gt"><div class="gl">Total do mês</div><div class="gln">${cells(c => tot[c] ? Math.round(tot[c]).toLocaleString('pt-BR') : '')}</div></div></div></div>
+  <p style="color:var(--mut);font-size:13px">Cada barra vai da 1ª à última parcela, com o número da parcela em cada mês. ✓ = parcela marcada como paga. O mês destacado é o mês ativo. Passe o mouse (ou toque) para ver o valor.</p>`;
+}
+
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side(); document.body.classList.toggle('lock', !!(fb && !user));
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
   if (viewing && view === 'share') view = 'home';
-  $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV }[view]();
+  $('#main').innerHTML = (viewing ? ban() : '') + { home, dash, mes, cg, res, sim, cats: catsV, share: shareV, parc: parcV }[view]();
   Object.entries(drf).forEach(([k, v]) => { const el = $('#' + k); if (el && el.tagName !== 'DIV') el.value = v; });
   post?.();
   if (viewing) $('#main').querySelectorAll('input,select,[data-act]').forEach(el => { if (el.dataset.act !== 'backmine') el.disabled = true; });
