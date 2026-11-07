@@ -9,7 +9,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 let YR = 2026;
 const MY = (y, i) => ((y === 2027 ? (S.m27 ??= {}) : S.months)[i] ??= { saldo: 0, tx: [], inst: [] });
 const inY = (y, f) => { const o = YR; YR = y; try { return f(); } finally { YR = o; } };
-const carry = () => YR === 2027 ? inY(2026, () => sum(MES.map((_, i) => i), i => calc(i).sav)) : 0;
+const carry = () => YR === 2027 ? inY(2026, () => sum(MES.map((_, i) => i), i => calc(i).sav)) + sum(S.res.extras, e => e.y === 2026 ? e.valor : 0) : 0;
 function wk(i) { let n = 0; for (let d = 1; d <= new Date(YR, i + 1, 0).getDate(); d++) if (new Date(YR, i, d).getDay() === 1) n++; return n; }
 function sal(i) {
   const m = (YR === 2027 ? S.m27 : S.months)?.[i]; if (!m) return 0; const f = x => +x || 0;
@@ -28,7 +28,7 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.res ??= { inicial: 0, saidas: [] }; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.res ??= { inicial: 0, saidas: [] }; s.res.extras ??= []; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
 let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, charts = [], post = null, fb = null, user = null, timer;
@@ -156,7 +156,7 @@ function drawChart(g) {
 }
 function dash() {
   const all = MES.map((_, i) => calc(i)), t = k => sum(all, x => x[k]), act = all.filter(x => x.g > 0);
-  const resTot = (+S.res.inicial || 0) + carry() + t('sav') - sum(S.res.saidas, x => x.valor);
+  const resTot = (+S.res.inicial || 0) + carry() + t('sav') + sum(S.res.extras, e => e.y === YR ? e.valor : 0) - sum(S.res.saidas, x => x.valor);
   post = () => S.dash.forEach(drawChart);
   const opt = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${l}</option>`).join('');
   const mo = MES.map((m, i) => [i, m]);
@@ -201,9 +201,9 @@ function mes() {
   const srt = [...m.tx].sort((p, q) => (p.date || '9999').localeCompare(q.date || '9999'));
   const rows = srt.map((x, i) => {
     const k = cat(x.cat), d = x.date || '', first = i === 0 || (srt[i - 1].date || '') !== d, last = i === srt.length - 1 || (srt[i + 1].date || '') !== d, e = f => `data-e="tx:${f}:${x.id}"`;
-    return `<tr><td ${e('date')} class="${last ? '' : 'dm'}">${first && d ? d.split('-').reverse().join('/') : ''}</td><td ${e('valor')} class="n">${brl(x.valor)}</td><td ${e('pag')}>${esc(x.pag)}</td><td ${e('cat')}><span class="tag" style="background:${k?.color || '#94a3b8'}">${esc(k?.name || '—')}</span></td><td ${e('desc')} title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="deltx" data-id="${x.id}">✕</button></td></tr>`;
+    return `<tr><td ${e('date')} class="${last ? '' : 'dm'}">${first && d ? d.split('-').reverse().join('/') : ''}</td><td ${e('valor')} class="n">${brl(x.valor)}</td><td ${e('pag')}>${esc(x.pag)}</td><td ${e('cat')}><span class="tag" style="background:${k?.color || '#94a3b8'}">${esc(k?.name || '—')}</span></td><td ${e('desc')} title="${esc(cmGet(x).join('\n'))}">${esc(x.desc)}${cmGet(x).length ? ' 💭' : ''}</td><td><button class="x" data-act="deltx" data-id="${x.id}">✕</button></td></tr>`;
   }).join('');
-  const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n" data-e="inst:valor:${x.id}">${brl(x.valor)}</td><td data-e="inst:pag:${x.id}">${esc(x.pag)}</td><td data-e="inst:desc:${x.id}" title="${esc(x.note)}">${esc(x.desc)}${x.note ? ' 💬' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const inst = m.inst.map(x => `<tr class="${x.pago ? 'paid' : ''}"><td><input type="checkbox" data-f="pago" data-id="${x.id}" ${x.pago ? 'checked' : ''}></td><td class="n" data-e="inst:valor:${x.id}">${brl(x.valor)}</td><td data-e="inst:pag:${x.id}">${esc(x.pag)}</td><td data-e="inst:desc:${x.id}" title="${esc(cmGet(x).join('\n'))}">${esc(x.desc)}${cmGet(x).length ? ' 💭' : ''}</td><td><button class="x" data-act="delinst" data-id="${x.id}">✕</button></td></tr>`).join('');
   const aPagar = sum(m.inst.filter(x => !x.pago), x => x.valor);
   const pfm = pform ? `<div class="gs"><div class="row"><input id="pv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="pt"><option value="cada">de cada parcela</option><option value="total">total (dividir)</option></select><select id="pg2">${popt}</select><input id="pn" type="number" min="1" max="12" placeholder="Parcelas" style="width:100px"></div>
     <div class="row"><input id="pd" placeholder="Descrição (ex.: Viagem)" style="flex:1;min-width:140px"><button class="b" data-act="addparc">Criar parcelas</button></div><small>Começa em ${MES[mi]} e segue pelos meses seguintes, até dezembro de 2027.</small></div>` : '';
@@ -237,18 +237,21 @@ function cg() {
 }
 
 function res() {
-  const r = S.res, sav = MES.map((_, i) => calc(i).sav), tot = sum(sav, x => x), sai = sum(r.saidas, x => x.valor);
-  let a = (+r.inicial || 0) + carry(); const acc = sav.map(v => (a += v));
+  const r = S.res, ex = MES.map((_, i) => sum(r.extras.filter(e => e.y === YR && e.m === i), e => e.valor)), sav = MES.map((_, i) => calc(i).sav), tot = sum(sav, x => x) + sum(ex, x => x), sai = sum(r.saidas, x => x.valor);
+  let a = (+r.inicial || 0) + carry(); const acc = sav.map((v, i) => (a += v + ex[i]));
   post = () => charts.push(new Chart($('#cr'), { type: 'line',
     data: { labels: MES.map(m => m.slice(0, 3)), datasets: [{ label: 'Reserva acumulada', data: acc, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.15)', fill: true, tension: .3 }] },
     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => brl(c.parsed.y) } } }, scales: { y: { ticks: { callback: v => brl(v) } } } } }));
   const rows = r.saidas.map(x => `<tr><td>${x.date ? x.date.split('-').reverse().join('/') : ''}</td><td class="n">${brl(x.valor)}</td><td>${esc(x.desc)}</td><td><button class="x" data-act="delres" data-id="${x.id}">✕</button></td></tr>`).join('');
+  const xr = r.extras.filter(e => e.y === YR).sort((p, q) => p.m - q.m).map(e => `<tr><td>${MES[e.m]}</td><td class="n">${brl(e.valor)}</td><td>${esc(e.desc)}</td><td><button class="x" data-act="delextra" data-id="${e.id}">✕</button></td></tr>`).join('');
+  const extraCard = `<div class="card" style="margin-bottom:14px"><h2>Adição extra</h2><div class="row"><select id="xm">${MES.map((m, i) => `<option value="${i}" ${i === Math.max(0, ACTM()) ? 'selected' : ''}>${m}</option>`).join('')}</select><input id="xv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="xn" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addextra">Adicionar</button></div>
+  <div class="scroll"><table><tr><th>Mês</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${xr}</table></div></div>`;
   return `<h1>Reserva</h1><div class="grid">
   <div class="card kpi"><span>Saldo inicial (R$)</span><input type="number" step="0.01" data-f="rinicial" value="${r.inicial || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Guardado em ' + YR, tot)}${kpi('Saídas da reserva', sai, 'neg')}${kpi('Total atual', (+r.inicial || 0) + carry() + tot - sai, 'pos')}</div>
   <div class="cols"><div class="card"><h2>Reserva acumulada · passe o mouse nos pontos</h2><div class="chart"><canvas id="cr"></canvas></div></div>
-  <div class="card"><h2>Saídas da reserva</h2><div class="row"><input id="rd" type="date"><input id="rv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="rn" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addres">Adicionar</button></div>
-  <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${rows}</table></div></div></div>`;
+  <div>${extraCard}<div class="card"><h2>Saídas da reserva</h2><div class="row"><input id="rd" type="date"><input id="rv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="rn" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addres">Adicionar</button></div>
+  <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Descrição</th><th></th></tr>${rows}</table></div></div></div></div>`;
 }
 
 function sim() {
@@ -390,6 +393,32 @@ function planV() {
   <button class="b" data-act="plsave">${p.id ? 'Atualizar plano' : 'Salvar plano'}</button>${p.id ? '<button class="x" data-act="plsave" data-novo="1">Salvar como novo</button>' : ''}<button class="x" data-ui="plnew">Limpar</button></div></div>`;
 }
 
+const cmGet = x => x.cm || (x.note ? [x.note] : []);
+let cmRef = null;
+const cmX = () => cmRef && (cmRef.kind === 'tx' ? M(mi).tx : M(mi).inst).find(r => r.id === cmRef.id);
+const cmClose = () => { cmRef = null; $('#cmenu').hidden = true; };
+function cmFill() {
+  const x = cmX(); if (!x) return cmClose();
+  $('#cmenu').innerHTML = `<h2>💭 Comentários</h2>${cmGet(x).map((t, i) => `<div class="row"><input data-cm="${i}" value="${esc(t)}" style="flex:1"><button class="x" data-cmdel="${i}">✕</button></div>`).join('')}<div class="row"><input id="cmn" placeholder="Novo comentário" style="flex:1"><button class="b" data-cmadd="1">Adicionar</button></div>`;
+}
+function cmOpen(td) {
+  const [kind, , id] = td.dataset.e.split(':'); cmRef = { kind, id }; cmFill();
+  const r = td.getBoundingClientRect(), b = $('#cmenu'); b.style.top = Math.min(r.bottom + 4, innerHeight - 240) + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - 360)) + 'px'; b.hidden = false; $('#cmn')?.focus();
+}
+const cmSet = f => { const x = cmX(); if (!x) return; const a = [...cmGet(x)]; f(a); x.cm = a.filter(Boolean); delete x.note; save(); render(); cmFill(); };
+$('#cmenu').onclick = e => {
+  const a = e.target.closest('[data-cmadd]'), d = e.target.closest('[data-cmdel]');
+  if (a) { const t = ($('#cmn').value || '').trim(); if (t) cmSet(L => L.push(t)); } else if (d) cmSet(L => L.splice(+d.dataset.cmdel, 1));
+};
+$('#cmenu').onchange = e => { const i = e.target.dataset.cm; if (i !== undefined) cmSet(L => { L[+i] = e.target.value.trim(); }); };
+$('#cmenu').onkeydown = e => { if (e.key === 'Enter' && e.target.id === 'cmn') { const t = e.target.value.trim(); if (t) cmSet(L => L.push(t)); } if (e.key === 'Escape') cmClose(); };
+$('#main').addEventListener('click', e => {
+  const td = e.target.closest('td[data-e]');
+  if (td && /^(tx|inst):desc:/.test(td.dataset.e) && !td.querySelector('input') && innerWidth >= 720 && !viewing) cmOpen(td);
+});
+document.addEventListener('click', e => { const td = e.target.closest('td[data-e]'); if (!e.target.closest('#cmenu') && !(td && /:desc:/.test(td.dataset.e))) cmClose(); });
+addEventListener('scroll', cmClose, true);
+
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side(); document.body.classList.toggle('lock', !!(fb && !user));
   if (fb && !user) { $('#main').innerHTML = loginV(); return; }
@@ -440,6 +469,8 @@ const ACT = {
     if (!novos.length) return alert(pv.length ? 'As parcelas do mês anterior já foram puxadas.' : 'O mês anterior não tem parcelas planejadas.');
     novos.forEach(x => m.tx.push({ id: uid(), date: d, valor: x.valor, pag: x.pag, cat: ct?.id, desc: x.desc, from: x.id })); if (!d0?.id) ppick = false;
   },
+  addextra() { const v = +val('#xv'); if (v) S.res.extras.push({ id: uid(), y: YR, m: +val('#xm'), valor: v, desc: val('#xn') || '' }); },
+  delextra(d) { S.res.extras = S.res.extras.filter(x => x.id !== d.id); },
   addres() { const v = +val('#rv'); if (v) S.res.saidas.push({ id: uid(), date: val('#rd'), valor: v, desc: val('#rn') }); },
   delres(d) { S.res.saidas = S.res.saidas.filter(x => x.id !== d.id); },
   addsim() { const v = +val('#sv'); if (v) S.sim.itens.push({ id: uid(), desc: val('#sd'), valor: v, on: true }); },
@@ -546,6 +577,7 @@ $('#burger').onclick = () => $('#side').classList.toggle('show');
 $('#bd').onclick = () => $('#side').classList.remove('show');
 
 $('#main').ondblclick = e => {
+  cmClose();
   const td = e.target.closest('td[data-e]'); if (viewing || !td || td.querySelector('input,select')) return;
   const [kind, k, id] = td.dataset.e.split(':'), x = (kind === 'tx' ? M(mi).tx : kind === 'inst' ? M(mi).inst : S.sim.itens).find(r => r.id === id); if (!x) return;
   const el = document.createElement(k === 'pag' || k === 'cat' ? 'select' : 'input');
