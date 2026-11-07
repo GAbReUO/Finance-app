@@ -401,11 +401,21 @@ function cmFill() {
   const x = cmX(); if (!x) return cmClose();
   $('#cmenu').innerHTML = `<h2>💭 Comentários</h2>${cmGet(x).map((t, i) => `<div class="row"><input data-cm="${i}" value="${esc(t)}" style="flex:1"><button class="x" data-cmdel="${i}">✕</button></div>`).join('')}<div class="row"><input id="cmn" placeholder="Novo comentário" style="flex:1"><button class="b" data-cmadd="1">Adicionar</button></div>`;
 }
+function cmPlace(td) {
+  const r = td.getBoundingClientRect(), b = $('#cmenu'); b.style.maxHeight = '';
+  const h = b.offsetHeight, below = innerHeight - r.bottom - 8, above = r.top - 8; let top;
+  if (h <= below) top = r.bottom + 4;
+  else if (h <= above) top = r.top - h - 4;
+  else if (below >= above) { b.style.maxHeight = Math.max(120, below - 4) + 'px'; top = r.bottom + 4; }
+  else { b.style.maxHeight = Math.max(120, above - 4) + 'px'; top = r.top - b.offsetHeight - 4; }
+  b.style.top = top + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - b.offsetWidth - 8)) + 'px';
+}
+const cmPlace2 = () => { const td = cmRef && document.querySelector(`#main td[data-e="${cmRef.kind}:desc:${cmRef.id}"]`); if (td) cmPlace(td); };
 function cmOpen(td) {
   const [kind, , id] = td.dataset.e.split(':'); cmRef = { kind, id }; cmFill();
-  const r = td.getBoundingClientRect(), b = $('#cmenu'); b.style.top = Math.min(r.bottom + 4, innerHeight - 240) + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - 360)) + 'px'; b.hidden = false; $('#cmn')?.focus();
+  $('#cmenu').hidden = false; cmPlace(td); $('#cmn')?.focus({ preventScroll: true });
 }
-const cmSet = f => { const x = cmX(); if (!x) return; const a = [...cmGet(x)]; f(a); x.cm = a.filter(Boolean); delete x.note; save(); render(); cmFill(); };
+const cmSet = f => { const x = cmX(); if (!x) return; const a = [...cmGet(x)]; f(a); x.cm = a.filter(Boolean); delete x.note; save(); render(); cmFill(); cmPlace2(); };
 $('#cmenu').onclick = e => {
   const a = e.target.closest('[data-cmadd]'), d = e.target.closest('[data-cmdel]');
   if (a) { const t = ($('#cmn').value || '').trim(); if (t) cmSet(L => L.push(t)); } else if (d) cmSet(L => L.splice(+d.dataset.cmdel, 1));
@@ -417,7 +427,7 @@ $('#main').addEventListener('click', e => {
   if (td && /^(tx|inst):desc:/.test(td.dataset.e) && !td.querySelector('input') && innerWidth >= 720 && !viewing) cmOpen(td);
 });
 document.addEventListener('click', e => { const td = e.target.closest('td[data-e]'); if (!e.target.closest('#cmenu') && !(td && /:desc:/.test(td.dataset.e))) cmClose(); });
-addEventListener('scroll', cmClose, true);
+addEventListener('scroll', e => { if (!e.target.closest?.('#cmenu')) cmClose(); }, true);
 
 function render() {
   charts.forEach(c => c.destroy()); charts = []; post = null; side(); document.body.classList.toggle('lock', !!(fb && !user));

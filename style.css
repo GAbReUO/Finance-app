@@ -98,3 +98,4 @@ select.mbtn{background:var(--card);border:1px solid var(--line);border-radius:8p
 .dyrs{display:flex;gap:32px;flex-wrap:wrap}
 @media(max-width:720px){.dyrs{display:block}.drow{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.plg{display:grid;grid-template-columns:1fr 1fr;gap:12px}.plf.plg input:not([type=color]){width:100%}}
 #cmenu{position:fixed;z-index:45;width:340px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}#cmenu[hidden]{display:none}#cmenu .row{margin:6px 0}#cmenu h2{margin:0 0 6px}
+#cmenu{overflow:auto}
