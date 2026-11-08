@@ -31,7 +31,7 @@ const uname = u => u.displayName || (u.email || '').split('@')[0];
 const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.res ??= { inicial: 0, saidas: [] }; s.res.extras ??= []; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, gd = { meta: '', ate: 23, ini: '', juros: '' }, gres = null, charts = [], post = null, fb = null, user = null, timer;
 const M = i => MY(YR, i);
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -43,19 +43,28 @@ const catMonth = (c, i) => sum(M(i).tx.filter(x => x.cat === c.id), x => x.valor
 const kpi = (l, v, cls = '') => `<div class="card kpi"><span>${l}</span><b class="${cls}">${brl(v)}</b></div>`;
 const sgn = v => v < 0 ? 'neg' : 'pos';
 const dlab = mode => ({ id: 'dlab', afterDatasetsDraw(ch) {
-  const x = ch.ctx, d = ch.data.datasets[0], tot = d.data.reduce((a, b) => a + b, 0);
+  const x = ch.ctx, d = ch.data.datasets[0], tot = d.data.reduce((p, q) => p + q, 0), fs = innerWidth < 720 ? 13 : 16, side = { r: -1e9, l: 1e9 };
+  x.save(); x.font = `bold ${fs}px sans-serif`; x.textBaseline = 'middle';
   ch.getDatasetMeta(0).data.forEach((a, i) => {
-    const v = d.data[i]; if (!v || v / tot < 0.04 || !ch.getDataVisibility(i)) return;
-    const p = a.getCenterPoint(), t = mode === 'val' ? brl(v) : (v / tot * 100).toFixed(1).replace('.', ',') + '%';
-    x.save(); x.font = (innerWidth < 720 ? 'bold 13px' : 'bold 16px') + ' sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.7)'; x.fillStyle = '#fff'; x.strokeText(t, p.x, p.y); x.fillText(t, p.x, p.y); x.restore();
+    const v = d.data[i]; if (!v || !ch.getDataVisibility(i)) return;
+    const t = mode === 'val' ? brl(v) : (v / tot * 100).toFixed(1).replace('.', ',') + '%', w = x.measureText(t).width;
+    const ma = (a.startAngle + a.endAngle) / 2, cs = Math.cos(ma), sn = Math.sin(ma), R = a.outerRadius, rm = (a.innerRadius + R) / 2;
+    if (rm * (a.endAngle - a.startAngle) >= w + 8 && R - a.innerRadius >= fs + 6) {
+      const px = a.x + cs * rm, py = a.y + sn * rm; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.7)'; x.fillStyle = '#fff'; x.strokeText(t, px, py); x.fillText(t, px, py);
+    } else {
+      let ty = a.y + sn * (R + 22); if (cs >= 0) { ty = Math.max(ty, side.r + fs + 2); side.r = ty; } else { ty = Math.min(ty, side.l - fs - 2); side.l = ty; }
+      const sg = cs >= 0 ? 1 : -1, ex = a.x + cs * (R + 12), tx = a.x + sg * (R + 28);
+      x.strokeStyle = (d.backgroundColor && d.backgroundColor[i]) || '#aaa'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(a.x + cs * R, a.y + sn * R); x.lineTo(ex, ty); x.lineTo(tx, ty); x.stroke();
+      x.textAlign = sg > 0 ? 'left' : 'right'; x.fillStyle = '#fff'; x.fillText(t, tx + sg * 4, ty);
+    }
   });
+  x.restore();
 } });
 const donut = (id, items, mode, cut) => charts.push(new Chart($(id), {
   plugins: mode ? [dlab(mode)] : [],
   type: 'doughnut',
   data: { labels: items.map(x => x.n), datasets: [{ data: items.map(x => x.v), backgroundColor: items.map(x => x.c), borderColor: '#141414' }] },
-  options: { maintainAspectRatio: false, cutout: cut || '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
+  options: { maintainAspectRatio: false, layout: { padding: mode ? (innerWidth < 720 ? { left: mode === 'val' ? 70 : 44, right: mode === 'val' ? 70 : 44, top: 18, bottom: 18 } : { left: mode === 'val' ? 100 : 62, right: mode === 'val' ? 100 : 62, top: 22, bottom: 22 }) : 0 }, cutout: cut || '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
@@ -130,7 +139,7 @@ function drawChart(g) {
   if (g.type === 'area') g.type = 'line';
   const ms = MES.map((_, i) => i).filter(i => i >= g.from && i <= g.to), id = '#ch_' + g.id;
   const cs = S.cats.filter(k => g.cats.length ? g.cats.includes(k.id) : !k.saving);
-  if (g.type === 'donut' || g.type === 'pie') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), innerWidth >= 720 ? g.lbl : null, g.type === 'pie' ? '0%' : undefined);
+  if (g.type === 'donut' || g.type === 'pie') return donut(id, cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0), g.lbl || null, g.type === 'pie' ? '0%' : undefined);
   if (g.type === 'hbar') {
     const it = cs.map(k => ({ n: k.name, c: k.color, v: sum(ms, i => catMonth(k, i)) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
     return charts.push(new Chart($(id), { type: 'bar', data: { labels: it.map(x => x.n), datasets: [{ data: it.map(x => x.v), backgroundColor: it.map(x => x.c) }] },
@@ -164,7 +173,7 @@ function dash() {
     <select data-f="gtype" data-id="${g.id}">${opt([['bar', 'Barras'], ['line', 'Linhas'], ['hbar', 'Ranking (barras horizontais)'], ['radar', 'Radar'], ['donut', 'Rosca'], ['pie', 'Pizza']], g.type)}</select>
     ${!['donut', 'pie', 'hbar', 'radar'].includes(g.type) ? `<select data-f="gmetric" data-id="${g.id}">${opt([['resumo', 'Salário × Gastos × Reserva'], ['cats', 'Por categoria']], g.metric)}</select>` : ''}</div>
     <div class="row"><label>De <select data-f="gfrom" data-id="${g.id}">${opt(mo, g.from)}</select></label><label>até <select data-f="gto" data-id="${g.id}">${opt(mo, g.to)}</select></label>
-    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${['donut', 'pie'].includes(g.type) ? `<label>Rótulos (PC) <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
+    <label><input type="checkbox" data-f="gwide" data-id="${g.id}" ${g.wide ? 'checked' : ''}> Largura total</label>${['donut', 'pie'].includes(g.type) ? `<label>Rótulos <select data-f="glbl" data-id="${g.id}">${opt([['', 'Nenhum'], ['pct', 'Porcentagem'], ['val', 'Valor']], g.lbl || '')}</select></label>` : ''}</div>
     ${['donut', 'pie', 'hbar', 'radar'].includes(g.type) || g.metric === 'cats' ? `<div class="row">${S.cats.map(k => `<label class="chip"><input type="checkbox" data-f="gcat" data-id="${g.id}" data-c="${k.id}" ${g.cats.includes(k.id) ? 'checked' : ''}><i style="background:${k.color}"></i>${esc(k.name)}</label>`).join('')}</div><small>Nenhuma categoria marcada = todas, exceto as de reserva.</small>` : ''}
     <div class="row" style="margin:10px 0 0"><button class="x" data-act="gdel" data-id="${g.id}">🗑 Remover gráfico</button></div></div>`;
   const card = g => `<div class="card gc ${g.wide ? 'wide' : ''}" data-id="${g.id}"><div class="gh"><span class="grip" draggable="true" title="Arraste para mover">⠿</span><h2>${esc(g.title)}</h2>
@@ -229,7 +238,7 @@ function mes() {
 
 function cg() {
   const row = (l, f, cls = '', dot = '') => { const v = MES.map((_, i) => f(i)); return `<tr class="${cls}"><td>${dot}${esc(l)}</td>${v.map(x => `<td class="n">${x ? brl(x) : '–'}</td>`).join('')}<td class="n"><b>${brl(sum(v, x => x))}</b></td></tr>`; };
-  return `<h1>Controle Geral</h1><div class="card scroll"><table class="cgt"><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th></tr>
+  return `<h1>Controle Geral</h1><div class="card scroll vs"><table class="cgt"><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th></tr>
   ${row('Salário', i => calc(i).saldo)}${row('Gastos', i => calc(i).g)}${row('Reserva', i => calc(i).sav)}${row('Disponível', i => calc(i).disp, 'sum')}
   <tr class="h"><td colspan="14">GASTOS POR CATEGORIA</td></tr>
   ${S.cats.map(c => row(c.name, i => catMonth(c, i), '', `<span class="tag" style="background:${c.color};margin-right:8px">&nbsp;</span>`)).join('')}
@@ -261,7 +270,7 @@ function sim() {
   return `<div class="bar"><h1 style="margin:0">Simulação</h1><select class="mbtn" data-f="simmes">${MES.map((n, i) => `<option value="${i}" ${i === (simMi ?? mi) ? 'selected' : ''}>${n}</option>`).join('')}</select></div><div class="grid">
   <div class="card kpi"><span>Entrada prevista [salário] (R$)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
-  <div class="card"><h2>Contas e gastos previstos · desmarque para tirar da conta · clique 2 vezes para editar</h2>
+  <div class="card"><h2>Contas e gastos previstos</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[simMi ?? mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
   <div class="scroll"><table class="simt"><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
@@ -271,10 +280,10 @@ function sim() {
 function catsV() {
   const prow = S.pags.map((p, i) => `<tr><td><input data-f="pname" data-id="${i}" value="${esc(p)}"></td><td><button class="x" data-act="delpag" data-id="${i}">✕</button></td></tr>`).join('');
   const rows = S.cats.map(c => `<tr><td><input type="color" data-f="ccolor" data-id="${c.id}" value="${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#94a3b8'}"></td><td><input data-f="cname" data-id="${c.id}" value="${esc(c.name)}"></td>
-  <td><label><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva (não conta como gasto)</label></td><td><span class="tag" id="pv_${c.id}" style="background:${c.color}">${esc(c.name)}</span></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
-  return `<h1>Categorias</h1><div class="card"><div class="row"><input type="color" id="ncc" value="#22c55e"><input id="ncn" placeholder="Nova categoria"><button class="b" data-act="addcat">Adicionar</button></div>
-  <div class="scroll"><table><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th>Como aparece no Mês</th><th></th></tr>${rows}</table></div></div>
-  <div class="card" style="margin-top:14px"><h2>Formas de pagamento</h2><div class="row"><input id="npg" placeholder="Nova forma de pagamento"><button class="b" data-act="addpag">Adicionar</button></div><div class="scroll"><table><tr><th>Nome</th><th></th></tr>${prow}</table></div></div>`;
+  <td><label title="Não conta como gasto"><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva</label></td><td><span class="tag" id="pv_${c.id}" style="background:${c.color}">${esc(c.name)}</span></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
+  return `<h1>Categorias</h1><div class="catg"><div class="card"><div class="row"><input type="color" id="ncc" value="#22c55e"><input id="ncn" placeholder="Nova categoria"><button class="b" data-act="addcat">Adicionar</button></div>
+  <div class="scroll"><table class="ct"><tr><th>Cor</th><th>Nome</th><th>Tipo</th><th>Como aparece no Mês</th><th></th></tr>${rows}</table></div></div>
+  <div class="card"><h2>Formas de pagamento</h2><div class="row"><input id="npg" placeholder="Nova forma de pagamento"><button class="b" data-act="addpag">Adicionar</button></div><div class="scroll"><table class="ct"><tr><th>Nome</th><th></th></tr>${prow}</table></div></div></div>`;
 }
 
 function loginV() {
@@ -351,7 +360,7 @@ function parcV() {
     const segs = Array.from({ length: b - a + 1 }, (_, j) => { const idx = a + j, it = g.at[idx], k = idx - g.start + 1; return `<span class="${it?.pago ? 'pg' : ''}" title="${esc(g.desc)} · parcela ${k}/${g.n}${it ? ' · ' + brl(it.valor) : ''}">${it?.pago ? '✓ ' : ''}${k}/${g.n}</span>`; }).join('');
     return `<div class="gr" style="--r:${r + 3}"><div class="gl"><b>${esc(g.desc)}</b><small>${g.n}x · ${lbl(g.start)} → ${lbl(end)}</small></div><div class="gln">${cells(() => '')}</div><div class="gbar" style="grid-column:${a + 2} / span ${b - a + 1};background:${PAL[r % PAL.length]}">${segs}</div></div>`;
   }).join('');
-  return `<h1>Parcelamentos</h1><div class="card scroll" style="padding:0"><div class="gantt">
+  return `<h1>Parcelamentos</h1><div class="card scroll vs" style="padding:0"><div class="gantt">
   <div class="gr gy" style="--r:1"><div class="gl"></div><div class="gln" style="grid-template-columns:1fr 1fr"><div>2026</div><div>2027</div></div></div>
   <div class="gr gh" style="--r:2"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
   ${body || '<div style="padding:18px;color:var(--mut)">Nenhum parcelamento encontrado. Eles aparecem aqui quando a descrição está no formato "x/y - Descrição".</div>'}
@@ -359,6 +368,15 @@ function parcV() {
   <p style="color:var(--mut);font-size:13px">Cada coluna mostra a parcela paga naquele mês (o que você lança em “Próximo mês · parcelas” aparece no mês seguinte). ✓ = parcela marcada como paga. O mês destacado é o mês ativo. Passe o mouse (ou toque) para ver o valor.</p>`;
 }
 
+const mlb = i => MES[i % 12].slice(0, 3).toUpperCase() + ' ' + (2026 + Math.floor(i / 12));
+const resNow = () => (+S.res.inicial || 0) + [2026, 2027].reduce((t, y) => t + inY(y, () => sum(MES.map((_, i) => i), i => calc(i).sav)), 0) + sum(S.res.extras, e => e.valor) - sum(S.res.saidas, x => x.valor);
+function guideRes(g) {
+  const rows = g.cats.filter(x => x.cut > 0.005).map(x => `<tr><td><span class="tag" style="background:${x.c}">${esc(x.n)}</span></td><td class="n">${brl(x.avg)}</td><td class="n">${brl(x.cut)}</td><td class="n">${brl(x.avg - x.cut)}</td></tr>`).join('');
+  return `<div style="margin-top:10px"><p style="margin:4px 0">Para ter <b>${brl(g.M0)}</b> até <b>${mlb(g.T)}</b> (${g.n} ${g.n === 1 ? 'mês' : 'meses'}) você precisa guardar <b style="color:var(--g)">${brl(g.V)}</b> por mês.</p>
+  <p style="margin:4px 0;color:var(--mut)">Folga média hoje: ${brl(g.folga)}/mês${g.ids ? ` (média do Disponível dos últimos ${g.ids} meses)` : ' (sem histórico)'}. ${g.falta > 0 ? `Faltam <b style="color:var(--tx)">${brl(g.falta)}</b>/mês.` : 'A folga já cobre o valor mensal.'}</p>
+  ${g.falta > 0 ? `<div class="scroll"><table class="ct"><tr><th>Categoria</th><th class="n">Média/mês</th><th class="n">Corte sugerido</th><th class="n">Novo teto</th></tr>${rows}<tr class="sum"><td>Total</td><td></td><td class="n">${brl(g.cortes)}</td><td></td></tr></table></div>${g.sobra > 0.005 ? `<p style="color:#facc15">Mesmo cortando até 30% das categorias flexíveis, ainda faltam ${brl(g.sobra)}/mês. Considere um prazo maior ou um aporte extra.</p>` : ''}` : ''}
+  <p style="color:var(--mut);font-size:13px">O plano abaixo foi preenchido com esses números; ajuste e salve se quiser. Sugestão baseada na média dos últimos meses (corte máximo de 30% por categoria; Contas, Parcelados e Investimentos ficam de fora).</p></div>`;
+}
 const newPlan = () => ({ nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] });
 const curIdx = () => { const a7 = inY(2027, ACTM); return a7 >= 0 ? 12 + a7 : inY(2026, ACTM); };
 function planCalc(p) {
@@ -384,13 +402,16 @@ function planV() {
     <p style="color:var(--mut);margin:6px 0">${brl(+q.inicial || 0)} + ${brl(+q.valor || 0)} × ${q.meses} meses${+q.juros ? ` · juros de ${q.juros}% ao mês` : ''}</p><b style="font-size:20px;color:var(--g)">${brl(k.fim)}</b>
     ${m2.length ? `<div style="margin-top:8px;color:var(--mut)">${lb(m2[0])} até ${lb(m2[m2.length - 1])} · mês ${done}/${m2.length}${done ? ` · deveria ter ${brl(k.ser[Math.min(done, k.n)])}` : ' · ainda não começou'}<div class="pgb"><i style="width:${Math.round(done / m2.length * 100)}%;background:${esc(q.cor)}"></i></div></div>` : ''}</div>`;
   }).join('');
-  return `<h1>Planejamento</h1><h2 style="margin:6px 0">Planos salvos</h2>${saved || '<p style="color:var(--mut)">Nenhum plano salvo ainda.</p>'}<div class="card" id="plform" style="--pc:${esc(p.cor)};margin-top:18px"><h2>Calcular um plano</h2>
+  const gdo = []; for (let k = cur + 1; k < 24; k++) gdo.push(`<option value="${k}" ${+gd.ate === k ? 'selected' : ''}>${lb(k)}</option>`);
+  const guia = `<div class="card guia"><h2>Plano de economia guiado</h2><div class="gdr"><label>Quero guardar (R$)<input type="number" step="0.01" data-f="gd_meta" value="${gd.meta}" placeholder="5000"></label><label>Até<select data-f="gd_ate">${gdo.join('')}</select></label><label>Reserva atual (R$)<input type="number" step="0.01" data-f="gd_ini" value="${gd.ini}" placeholder="${resNow().toFixed(2)}"></label><label>Juros ao mês (%)<input type="number" step="0.01" data-f="gd_juros" value="${gd.juros}" placeholder="0"></label><button class="b" data-act="guide">Calcular e preencher</button></div>${gres ? guideRes(gres) : ''}</div>`;
+  return `<h1>Planejamento</h1><h2 style="margin:6px 0">Planos salvos</h2><div class="plsv">${saved || '<p style="color:var(--mut)">Nenhum plano salvo ainda.</p>'}</div>${guia}
+  <div class="plgrid" id="plform" style="--pc:${esc(p.cor)}"><div class="card"><h2>Calcular um plano</h2>
   <div class="plf plg">${inp('inicial', 'Valor inicial (R$)', '0,00')}${inp('meses', 'Quantidade de meses', '12')}${inp('valor', 'Valor por mês (R$)', '0,00')}${inp('juros', 'Juros ao mês (%) · opcional', '0')}</div>
-  <h2 style="margin-top:18px">Meses do plano · opcional</h2><div class="dyrs">${dots}</div><p style="color:var(--mut)">${mk.length ? `${lb(mk[0])} até ${lb(mk[mk.length - 1])} · ${mk.length} ${mk.length === 1 ? 'mês marcado' : 'meses marcados'}${mk.length !== c.n && c.n ? ` (o plano tem ${c.n})` : ''}` : 'Nenhum mês marcado.'}</p>
-  <div id="plr">${planRes()}</div><div class="chart" style="margin-top:14px"><canvas id="plc"></canvas></div>
-  <p style="color:var(--mut);font-size:13px">Cálculo: valor inicial + valor por mês × meses. Com juros, o saldo rende a % ao mês e o valor mensal entra no fim de cada mês.</p>
-  <div class="plf" style="align-items:flex-end;margin-top:8px"><label>Nome do plano<input data-f="pl_nome" value="${esc(p.nome)}" placeholder="Ex.: Viagem 2027" style="width:240px"></label><label>Cor<input type="color" data-f="pl_cor" value="${esc(p.cor)}"></label>
-  <button class="b" data-act="plsave">${p.id ? 'Atualizar plano' : 'Salvar plano'}</button>${p.id ? '<button class="x" data-act="plsave" data-novo="1">Salvar como novo</button>' : ''}<button class="x" data-ui="plnew">Limpar</button></div></div>`;
+  <h2 style="margin-top:12px">Meses do plano · opcional</h2><div class="dyrs">${dots}</div><p style="color:var(--mut);margin:6px 0">${mk.length ? `${lb(mk[0])} até ${lb(mk[mk.length - 1])} · ${mk.length} ${mk.length === 1 ? 'mês marcado' : 'meses marcados'}${mk.length !== c.n && c.n ? ` (o plano tem ${c.n})` : ''}` : 'Nenhum mês marcado.'}</p>
+  <div class="plf" style="align-items:flex-end;margin-top:8px"><label>Nome do plano<input data-f="pl_nome" value="${esc(p.nome)}" placeholder="Ex.: Viagem 2027" style="width:220px"></label><label>Cor<input type="color" data-f="pl_cor" value="${esc(p.cor)}"></label>
+  <button class="b" data-act="plsave">${p.id ? 'Atualizar plano' : 'Salvar plano'}</button>${p.id ? '<button class="x" data-act="plsave" data-novo="1">Salvar como novo</button>' : ''}<button class="x" data-ui="plnew">Limpar</button></div></div>
+  <div class="card"><div id="plr">${planRes()}</div><div class="chart" style="height:250px;margin-top:10px"><canvas id="plc"></canvas></div>
+  <p style="color:var(--mut);font-size:13px;margin:8px 0 0">Cálculo: valor inicial + valor por mês × meses. Com juros, o saldo rende a % ao mês e o valor mensal entra no fim de cada mês.</p></div></div>`;
 }
 
 const cmGet = x => x.cm || (x.note ? [x.note] : []);
@@ -499,6 +520,21 @@ const ACT = {
   verified() { user.reload().then(() => user.getIdToken(true)).then(loadShared).then(render).catch(er => alert(ERR(er))); },
   openshare(d) { openShared(shared[+d.i]); },
   backmine() { S = mine; viewing = null; mine = null; mi = Math.max(0, ACTM()); view = 'home'; },
+  guide() {
+    const cur = curIdx(), T = +gd.ate, M0 = +gd.meta, n = T - cur, yr = k => k < 12 ? 2026 : 2027;
+    if (!(M0 > 0) || !(n >= 1)) return alert('Informe a meta e um mês final depois do mês atual.');
+    const P = gd.ini === '' ? resNow() : +gd.ini, r = (+gd.juros || 0) / 100;
+    if (P >= M0) return alert('Você já tem o valor da meta.');
+    const f = Math.pow(1 + r, n), V = Math.ceil((r ? (M0 - P * f) * r / (f - 1) : (M0 - P) / n) * 100) / 100;
+    const ids = []; for (let k = cur; k >= 0 && ids.length < 3; k--) if (inY(yr(k), () => calc(k % 12).g) > 0) ids.push(k);
+    const avg = fn => ids.length ? sum(ids, k => inY(yr(k), () => fn(k % 12))) / ids.length : 0, FIX = ['contas', 'parcelados', 'reserva', 'investimentos'];
+    const folga = Math.max(0, avg(i => calc(i).disp)), falta = Math.max(0, V - folga);
+    const cats = S.cats.filter(c => !c.saving && !FIX.includes(c.name.toLowerCase())).map(c => ({ n: c.name, c: c.color, avg: avg(i => catMonth(c, i)) })).filter(x => x.avg > 0), tw = sum(cats, x => x.avg) || 1;
+    cats.forEach(x => { x.cut = Math.min(x.avg * 0.3, falta * x.avg / tw); });
+    const cortes = sum(cats, x => x.cut);
+    gres = { M0, T, n, V, folga, falta, cats, cortes, sobra: Math.max(0, falta - cortes), ids: ids.length };
+    plan = { ...newPlan(), nome: `Meta ${mlb(T)}`, inicial: P.toFixed(2), meses: n, valor: V.toFixed(2), juros: gd.juros, marc: Array.from({ length: n }, (_, j) => cur + 1 + j) };
+  },
   plsave(d) {
     const nm = (plan.nome || '').trim(); if (!nm) return alert('Dê um nome ao plano.'); if (!(+plan.meses > 0)) return alert('Informe a quantidade de meses.');
     const id = plan.id && !d.novo ? plan.id : uid(), q = JSON.parse(JSON.stringify({ ...plan, nome: nm, id })), i = S.plans.findIndex(x => x.id === id);
@@ -529,6 +565,7 @@ $('#main').onclick = e => {
   if (/^add/.test(a.dataset.act)) drf = {}; ACT[a.dataset.act](a.dataset); save(); render(); };
 $('#main').onchange = e => {
   const t = e.target, f = t.dataset.f; if (!f) return; if (viewing) return render();
+  if (f.startsWith('gd_')) { gd[f.slice(3)] = t.value; return render(); }
   if (f.startsWith('pl_')) { plan[f.slice(3)] = t.value; return render(); }
   const g = S.dash.find(x => x.id === t.dataset.id), c = cat(t.dataset.id), i = M(mi).inst.find(x => x.id === t.dataset.id), s = S.sim.itens.find(x => x.id === t.dataset.id);
   if (f === 'saldo') M(mi).saldo = +t.value;
