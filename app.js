@@ -28,7 +28,15 @@ const DDASH = () => [
   { id: uid(), title: 'Evolução por categoria', type: 'bar', metric: 'cats', cats: [], from: 0, to: 11, wide: 1 }
 ];
 const uname = u => u.displayName || (u.email || '').split('@')[0];
-const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.cards ??= []; s.parcCard ??= {}; s.res ??= { inicial: 0, saidas: [] }; s.res.extras ??= []; s.sim ??= { entrada: 0, itens: [] }; return s; };
+const BANKS = [['Nubank', '#8a05be'], ['Carrefour', '#1e5aa8'], ['C6', '#9ca3af'], ['Santander', '#ec0000'], ['Bradesco', '#cc092f'], ['Next', '#00c26e'],
+  ['Itaú', '#ec7000'], ['Inter', '#ff7a00'], ['Banco do Brasil', '#f9d71c'], ['Caixa', '#0070af'], ['Mercado Pago', '#00b1ea'], ['PicPay', '#21c25e'],
+  ['XP', '#c9a227'], ['BTG Pactual', '#3b82f6'], ['Neon', '#00e5ff'], ['Original', '#00a859'], ['Porto', '#0072ce'], ['Renner', '#d71920'],
+  ['Riachuelo', '#e30613'], ['C&A', '#e4002b'], ['Magalu', '#0086ff'], ['Casas Bahia', '#1d4ed8']];
+const fixCards = s => {
+  s.cards = (s.cards || []).map(c => typeof c === 'string' ? { name: c, color: (BANKS.find(b => b[0].toLowerCase() === c.toLowerCase()) || [0, '#94a3b8'])[1] } : c);
+  if (!s.cardsInit) { BANKS.forEach(([name, color]) => { if (!s.cards.some(c => c.name.toLowerCase() === name.toLowerCase())) s.cards.push({ name, color }); }); s.cardsInit = true; }
+};
+const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.parcCard ??= {}; fixCards(s); s.res ??= { inicial: 0, saidas: [] }; s.res.extras ??= []; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
 let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, gd = { meta: '', ate: 23, ini: '', juros: '' }, gres = null, cmpOn = false, charts = [], post = null, fb = null, user = null, timer;
@@ -40,6 +48,7 @@ const calc = i => {
   const sd = sal(i); return { saldo: sd, tot, sav, g: tot - sav, disp: sd - tot };
 };
 const catMonth = (c, i) => sum(M(i).tx.filter(x => x.cat === c.id), x => x.valor);
+const catAvg = (k, ex = -1) => { const v = MES.map((_, j) => j).filter(j => j !== ex).map(j => catMonth(k, j)).filter(x => x > 0); return { avg: v.length ? sum(v, x => x) / v.length : 0, n: v.length }; };
 const kpi = (l, v, cls = '') => `<div class="card kpi"><span>${l}</span><b class="${cls}">${brl(v)}</b></div>`;
 const sgn = v => v < 0 ? 'neg' : 'pos';
 const dlab = mode => ({ id: 'dlab', afterDatasetsDraw(ch) {
@@ -207,9 +216,9 @@ function mes() {
   const bud = S.cats.filter(k => !k.saving && +k.limite > 0).map(k => { const sp = catMonth(k, mi); return { k, sp, pc: sp / k.limite * 100 }; });
   const budCard = bud.length ? `<div class="card" style="margin-bottom:14px"><h2>Limites por categoria</h2>${bud.map(({ k, sp, pc }) => `<div class="bgr"><div class="cmph"><span class="tag" style="background:${k.color}">${esc(k.name)}</span><span class="cmpv">${brl(sp)} <small style="color:var(--mut)">de ${brl(k.limite)}</small></span><b class="${pc >= 100 ? 'neg' : pc >= 80 ? 'wrn' : 'pos'}">${pc >= 100 ? '⚠ estourou' : pc >= 80 ? '⚠ perto' : '✓'} ${pc.toFixed(0)}%</b></div><div class="cmpb"><i style="width:${Math.min(pc, 100)}%;background:${pc >= 100 ? 'var(--red)' : pc >= 80 ? '#facc15' : k.color}"></i></div></div>`).join('')}</div>` : '';
   const oth = MES.map((_, j) => j).filter(j => j !== mi && calc(j).g > 0);
-  const cmpHtml = !oth.length ? '<small style="color:var(--mut)">Sem outros meses com gastos para comparar.</small>' : S.cats.filter(k => !k.saving).map(k => ({ k, cur: catMonth(k, mi), avg: sum(oth, j => catMonth(k, j)) / oth.length })).filter(r => r.cur > 0 || r.avg > 0).sort((p, q) => q.cur - p.cur).map(({ k, cur, avg }) => {
+  const cmpHtml = !oth.length ? '<small style="color:var(--mut)">Sem outros meses com gastos para comparar.</small>' : S.cats.filter(k => !k.saving).map(k => ({ k, cur: catMonth(k, mi), ...catAvg(k, mi) })).filter(r => r.cur > 0 || r.avg > 0).sort((p, q) => q.cur - p.cur).map(({ k, cur, avg, n }) => {
     const d = cur - avg, up = d > 0, mx = Math.max(cur, avg) || 1, pc = avg ? Math.abs(d / avg * 100).toFixed(0) + '%' : 'novo';
-    return `<div class="cmpr"><div class="cmph"><span class="tag" style="background:${k.color}">${esc(k.name)}</span><span class="cmpv">${brl(cur)}</span><b class="${up ? 'neg' : 'pos'}">${d === 0 ? '=' : up ? '▲' : '▼'} ${pc} (${up ? '+' : '−'}${brl(Math.abs(d))})</b></div><div class="cmpb"><i style="width:${cur / mx * 100}%;background:${k.color}"></i><u style="left:${avg / mx * 100}%"></u></div><small>média dos outros meses: ${brl(avg)}</small></div>`;
+    return `<div class="cmpr"><div class="cmph"><span class="tag" style="background:${k.color}">${esc(k.name)}</span><span class="cmpv">${brl(cur)}</span><b class="${up ? 'neg' : 'pos'}">${d === 0 ? '=' : up ? '▲' : '▼'} ${pc} (${up ? '+' : '−'}${brl(Math.abs(d))})</b></div><div class="cmpb"><i style="width:${cur / mx * 100}%;background:${k.color}"></i><u style="left:${avg / mx * 100}%"></u></div><small>média dos meses com gasto: ${brl(avg)} (${n} ${n === 1 ? 'mês' : 'meses'} · igual ao Controle Geral)</small></div>`;
   }).join('');
   post = () => {
     if ($('#cm')) donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0), 'pct');
@@ -251,10 +260,10 @@ function mes() {
 }
 
 function cg() {
-  const row = (l, f, cls = '', dot = '') => { const v = MES.map((_, i) => f(i)); return `<tr class="${cls}"><td>${dot}${esc(l)}</td>${v.map(x => `<td class="n">${x ? brl(x) : '–'}</td>`).join('')}<td class="n"><b>${brl(sum(v, x => x))}</b></td></tr>`; };
-  return `<h1>Controle Geral</h1><div class="card scroll vs"><table class="cgt"><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th></tr>
+  const row = (l, f, cls = '', dot = '') => { const v = MES.map((_, i) => f(i)), nz = v.filter(x => x); return `<tr class="${cls}"><td>${dot}${esc(l)}</td>${v.map(x => `<td class="n">${x ? brl(x) : '–'}</td>`).join('')}<td class="n"><b>${brl(sum(v, x => x))}</b></td><td class="n" style="color:var(--mut)">${brl(nz.length ? sum(nz, x => x) / nz.length : 0)}</td></tr>`; };
+  return `<h1>Controle Geral</h1><div class="card scroll vs"><table class="cgt"><tr><th>Resumo</th>${MES.map(m => `<th class="n">${m.slice(0, 3)}</th>`).join('')}<th class="n">Total</th><th class="n" title="Média dos meses com valor">Média/mês</th></tr>
   ${row('Salário', i => calc(i).saldo)}${row('Gastos', i => calc(i).g)}${row('Reserva', i => calc(i).sav)}${row('Disponível', i => calc(i).disp, 'sum')}
-  <tr class="h"><td colspan="14">GASTOS POR CATEGORIA</td></tr>
+  <tr class="h"><td colspan="15">GASTOS POR CATEGORIA</td></tr>
   ${S.cats.map(c => row(c.name, i => catMonth(c, i), '', `<span class="tag" style="background:${c.color};margin-right:8px">&nbsp;</span>`)).join('')}
   ${row('Total saídas', i => calc(i).tot, 'sum')}</table></div>`;
 }
@@ -297,7 +306,9 @@ function catsV() {
   <td class="n"><input type="number" step="0.01" min="0" data-f="climite" data-id="${c.id}" value="${c.limite ?? ''}" placeholder="sem limite" style="width:110px"></td><td><label title="Não conta como gasto"><input type="checkbox" data-f="csave" data-id="${c.id}" ${c.saving ? 'checked' : ''}> É reserva</label></td><td><span class="tag" id="pv_${c.id}" style="background:${c.color}">${esc(c.name)}</span></td><td><button class="x" data-act="delcat" data-id="${c.id}">✕</button></td></tr>`).join('');
   return `<h1>Categorias</h1><div class="catg"><div class="card"><div class="row"><input type="color" id="ncc" value="#22c55e"><input id="ncn" placeholder="Nova categoria"><button class="b" data-act="addcat">Adicionar</button></div>
   <div class="scroll"><table class="ct"><tr><th>Cor</th><th>Nome</th><th class="n">Limite mensal (R$)</th><th>Tipo</th><th>Como aparece no Mês</th><th></th></tr>${rows}</table></div></div>
-  <div class="card"><h2>Formas de pagamento</h2><div class="row"><input id="npg" placeholder="Nova forma de pagamento"><button class="b" data-act="addpag">Adicionar</button></div><div class="scroll"><table class="ct"><tr><th>Nome</th><th></th></tr>${prow}</table></div></div></div>`;
+  <div class="card"><h2>Formas de pagamento</h2><div class="row"><input id="npg" placeholder="Nova forma de pagamento"><button class="b" data-act="addpag">Adicionar</button></div><div class="scroll"><table class="ct"><tr><th>Nome</th><th></th></tr>${prow}</table></div></div>
+  <div class="card"><h2>Cartões (parcelamentos)</h2><div class="row"><input type="color" id="ncdc" value="#8a05be"><input id="ncd" placeholder="Novo cartão"><button class="b" data-act="addcard">Adicionar</button></div>
+  <div class="scroll"><table class="ct"><tr><th>Cor da borda</th><th>Nome</th><th></th></tr>${S.cards.map((c, i) => `<tr><td><input type="color" data-f="cdcolor" data-id="${i}" value="${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#94a3b8'}"></td><td><input data-f="cdname" data-id="${i}" value="${esc(c.name)}"></td><td><button class="x" data-act="delcard" data-id="${i}" title="Remover cartão">✕</button></td></tr>`).join('')}</table></div></div></div>`;
 }
 
 function loginV() {
@@ -375,14 +386,14 @@ function parcV() {
     return `<div class="gr" style="--r:${r + 3}"><div class="gl"><b>${esc(g.desc)}</b><small>${g.n}x · ${lbl(g.start)} → ${lbl(end)}</small></div><div class="gln">${cells(() => '')}</div><div class="gbar" style="grid-column:${a + 2} / span ${b - a + 1};background:${PAL[r % PAL.length]}">${segs}</div></div>`;
   }).join('');
   const lastV = g => { const ks = Object.keys(g.at).map(Number).sort((p, q) => p - q); return +g.at[ks[ks.length - 1]].valor || 0; };
-  const info = rows.filter(g => g.start + g.n - 1 >= cur).map(g => {
+  const info = rows.filter(g => { const e = g.start + g.n - 1; return e > cur || (e === cur && !g.at[cur]?.pago); }).map(g => {
     const end = g.start + g.n - 1, a0 = Math.max(cur, g.start); let rest = 0; for (let i = a0; i <= end; i++) rest += +(g.at[i]?.valor ?? lastV(g)) || 0;
     return { g, rem: end - a0 + 1, rest, k: Math.min(Math.max(cur - g.start + 1, 1), g.n), mon: +g.at[cur]?.valor || 0, card: S.parcCard[g.key] || '' };
   });
-  const buckets = [...S.cards, ''].map(c => ({ c, items: info.filter(x => x.card === c) })).filter(b => b.c || b.items.length);
-  const cardsHtml = `<h2 style="margin:18px 0 6px">Dívidas por cartão · só parcelamentos em vigor</h2><div class="card"><div class="row"><input id="ncd" placeholder="Novo cartão (ex.: Nubank)"><button class="b" data-act="addcard">Adicionar cartão</button>${S.cards.map((c, i) => `<span class="chip">${esc(c)} <button class="x" data-act="delcard" data-id="${i}" title="Remover cartão">✕</button></span>`).join('')}</div>
-  <div class="scroll"><table class="ct"><tr><th>Parcelamento</th><th>Parcela</th><th class="n">Restante</th><th>Cartão</th></tr>${info.map(x => `<tr><td>${esc(x.g.desc)}</td><td>${x.k}/${x.g.n} · restam ${x.rem}</td><td class="n">${brl(x.rest)}</td><td><select data-f="parcard" data-id="${encodeURIComponent(x.g.key)}"><option value="">— sem cartão —</option>${S.cards.map(c => `<option ${c === x.card ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--mut)">Nenhum parcelamento em vigor.</td></tr>'}</table></div></div>
-  <div class="plsv" style="margin-top:12px">${buckets.map(b => `<div class="card"><h2 style="margin:0 0 4px">${b.c ? esc(b.c) : 'Sem cartão definido'}</h2><b style="font-size:20px;color:var(--g)">${brl(sum(b.items, x => x.rest))}</b><small style="color:var(--mut)"> restante · ${brl(sum(b.items, x => x.mon))} neste mês</small>${b.items.map(x => `<div style="color:var(--mut);margin-top:4px">${esc(x.g.desc)} · ${x.k}/${x.g.n} · ${brl(x.rest)}</div>`).join('')}</div>`).join('')}</div>`;
+  const buckets = [...S.cards.map(c => c.name), ''].map(c => ({ c, items: info.filter(x => x.card === c) })).filter(b => b.c || b.items.length);
+  const cardsHtml = `<h2 style="margin:18px 0 6px">Dívidas por cartão · só parcelamentos em vigor</h2><div class="card"><div class="row" style="color:var(--mut)"><small>Escolha o cartão de cada parcelamento. Para adicionar ou editar cartões, use a janela <b>Categorias</b>.</small></div>
+  <div class="scroll"><table class="ct"><tr><th>Parcelamento</th><th>Parcela</th><th class="n">Restante</th><th>Cartão</th></tr>${info.map(x => `<tr><td>${esc(x.g.desc)}</td><td>${x.k}/${x.g.n} · restam ${x.rem}</td><td class="n">${brl(x.rest)}</td><td><select data-f="parcard" data-id="${encodeURIComponent(x.g.key)}"><option value="">— sem cartão —</option>${S.cards.map(c => `<option ${c.name === x.card ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--mut)">Nenhum parcelamento em vigor.</td></tr>'}</table></div></div>
+  <div class="plsv" style="margin-top:12px">${buckets.map(b => `<div class="card" style="${b.c ? 'border:2px solid ' + (S.cards.find(c => c.name === b.c)?.color || '#94a3b8') : ''}"><h2 style="margin:0 0 4px">${b.c ? esc(b.c) : 'Sem cartão definido'}</h2><b style="font-size:20px;color:var(--g)">${brl(sum(b.items, x => x.rest))}</b><small style="color:var(--mut)"> restante · ${brl(sum(b.items, x => x.mon))} neste mês</small>${b.items.map(x => `<div style="color:var(--mut);margin-top:4px">${esc(x.g.desc)} · ${x.k}/${x.g.n} · ${brl(x.rest)}</div>`).join('')}</div>`).join('')}</div>`;
   return `<h1>Parcelamentos</h1><div class="card scroll vs" style="padding:0"><div class="gantt">
   <div class="gr gy" style="--r:1"><div class="gl"></div><div class="gln" style="grid-template-columns:1fr 1fr"><div>2026</div><div>2027</div></div></div>
   <div class="gr gh" style="--r:2"><div class="gl">Parcelamento</div><div class="gln">${cells(c => MES[c % 12].slice(0, 3))}</div></div>
@@ -564,8 +575,8 @@ const ACT = {
     if (i < 0) S.plans.push(q); else S.plans[i] = q; plan = JSON.parse(JSON.stringify(q));
   },
   pldel(d) { if (confirm('Excluir este plano?')) { S.plans = S.plans.filter(x => x.id !== d.id); if (plan.id === d.id) plan.id = null; } },
-  addcard() { const n = (val('#ncd') || '').trim(); if (n && !S.cards.includes(n)) S.cards.push(n); },
-  delcard(d) { const n = S.cards[+d.id]; S.cards.splice(+d.id, 1); Object.keys(S.parcCard).forEach(k => { if (S.parcCard[k] === n) delete S.parcCard[k]; }); },
+  addcard() { const n = (val('#ncd') || '').trim(); if (n && !S.cards.some(c => c.name.toLowerCase() === n.toLowerCase())) S.cards.push({ name: n, color: val('#ncdc') || '#94a3b8' }); },
+  delcard(d) { const n = S.cards[+d.id]?.name; S.cards.splice(+d.id, 1); Object.keys(S.parcCard).forEach(k => { if (S.parcCard[k] === n) delete S.parcCard[k]; }); },
   addcat() { const n = val('#ncn').trim(); if (n) S.cats.push({ id: uid(), name: n, color: val('#ncc'), saving: false }); },
   delcat(d) {
     if (MES.some((_, i) => M(i).tx.some(x => x.cat === d.id))) return alert('Esta categoria tem lançamentos. Mova-os antes de excluir.');
@@ -609,6 +620,8 @@ $('#main').onchange = e => {
   else if (f === 'gtype') g.type = t.value;
   else if (f === 'glbl') g.lbl = t.value;
   else if (f === 'climite') c.limite = t.value === '' ? undefined : +t.value;
+  else if (f === 'cdcolor') S.cards[+t.dataset.id].color = t.value;
+  else if (f === 'cdname') { const c = S.cards[+t.dataset.id], old = c.name, n = t.value.trim(); if (n) { c.name = n; Object.keys(S.parcCard).forEach(k => { if (S.parcCard[k] === old) S.parcCard[k] = n; }); } }
   else if (f === 'parcard') { const k = decodeURIComponent(t.dataset.id); if (t.value) S.parcCard[k] = t.value; else delete S.parcCard[k]; }
   else if (f === 'simmes') simMi = +t.value;
   else if (f === 'gmetric') g.metric = t.value;
