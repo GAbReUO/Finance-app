@@ -31,7 +31,7 @@ const uname = u => u.displayName || (u.email || '').split('@')[0];
 const fix = s => { s.dash ??= DDASH(); s.pags ??= [...PAG]; s.shareEmails ??= []; s.shareLabels ??= {}; s.months ??= {}; s.m27 ??= {}; s.plans ??= []; s.res ??= { inicial: 0, saidas: [] }; s.res.extras ??= []; s.sim ??= { entrada: 0, itens: [] }; return s; };
 
 let S = fix(JSON.parse(localStorage.getItem('fin26') || 'null') || DEF());
-let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, gd = { meta: '', ate: 23, ini: '', juros: '' }, gres = null, charts = [], post = null, fb = null, user = null, timer;
+let view = 'home', mi = Math.max(0, ACTM()), open = false, dedit = null, viewing = null, mine = null, shared = [], curId = 'state', bnames = {}, pform = false, plan = { nome: '', cor: '#22c55e', inicial: '', meses: '', valor: '', juros: '', marc: [] }, ppick = false, spick = false, simMi, drf = {}, gd = { meta: '', ate: 23, ini: '', juros: '' }, gres = null, cmpOn = false, charts = [], post = null, fb = null, user = null, timer;
 const M = i => MY(YR, i);
 const cat = id => S.cats.find(c => c.id === id);
 const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
@@ -52,10 +52,12 @@ const dlab = mode => ({ id: 'dlab', afterDatasetsDraw(ch) {
     if (rm * (a.endAngle - a.startAngle) >= w + 8 && R - a.innerRadius >= fs + 6) {
       const px = a.x + cs * rm, py = a.y + sn * rm; x.textAlign = 'center'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,.7)'; x.fillStyle = '#fff'; x.strokeText(t, px, py); x.fillText(t, px, py);
     } else {
-      let ty = a.y + sn * (R + 22); if (cs >= 0) { ty = Math.max(ty, side.r + fs + 2); side.r = ty; } else { ty = Math.min(ty, side.l - fs - 2); side.l = ty; }
-      const sg = cs >= 0 ? 1 : -1, ex = a.x + cs * (R + 12), tx = a.x + sg * (R + 28);
-      x.strokeStyle = (d.backgroundColor && d.backgroundColor[i]) || '#aaa'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(a.x + cs * R, a.y + sn * R); x.lineTo(ex, ty); x.lineTo(tx, ty); x.stroke();
-      x.textAlign = sg > 0 ? 'left' : 'right'; x.fillStyle = '#fff'; x.fillText(t, tx + sg * 4, ty);
+      const sg = cs >= 0 ? 1 : -1, lx = a.x + cs * (R + 14); let ty = a.y + sn * (R + 14);
+      ty = Math.min(Math.max(ty, fs / 2 + 2), ch.height - fs / 2 - 2);
+      if (cs >= 0) { ty = Math.max(ty, side.r + fs + 2); side.r = ty; } else { ty = Math.min(ty, side.l - fs - 2); side.l = ty; }
+      let tx = lx + sg * 4; const x0 = sg > 0 ? tx : tx - w; if (x0 < 4) tx += 4 - x0; else if (x0 + w > ch.width - 4) tx -= x0 + w - (ch.width - 4);
+      x.strokeStyle = (d.backgroundColor && d.backgroundColor[i]) || '#aaa'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(a.x + cs * R, a.y + sn * R); x.lineTo(lx, ty); x.stroke();
+      x.textAlign = sg > 0 ? 'left' : 'right'; x.fillStyle = '#fff'; x.fillText(t, tx, ty);
     }
   });
   x.restore();
@@ -64,7 +66,7 @@ const donut = (id, items, mode, cut) => charts.push(new Chart($(id), {
   plugins: mode ? [dlab(mode)] : [],
   type: 'doughnut',
   data: { labels: items.map(x => x.n), datasets: [{ data: items.map(x => x.v), backgroundColor: items.map(x => x.c), borderColor: '#141414' }] },
-  options: { maintainAspectRatio: false, layout: { padding: mode ? (innerWidth < 720 ? { left: mode === 'val' ? 70 : 44, right: mode === 'val' ? 70 : 44, top: 18, bottom: 18 } : { left: mode === 'val' ? 100 : 62, right: mode === 'val' ? 100 : 62, top: 22, bottom: 22 }) : 0 }, cutout: cut || '62%', plugins: { legend: { position: innerWidth < 720 ? 'bottom' : 'right', labels: { font: { size: 14 } } },
+  options: { maintainAspectRatio: false, layout: { padding: mode ? { top: 24, bottom: 8, left: 12, right: 12 } : 0 }, cutout: cut || '62%', plugins: { legend: { position: innerWidth < 720 || mode ? 'bottom' : 'right', labels: { font: { size: 14 } } },
     tooltip: { callbacks: { label: t => `${t.label}: ${brl(t.parsed)} (${(t.parsed / t.dataset.data.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%)` } } } }
 }));
 
@@ -197,8 +199,13 @@ function mes() {
   const rc = md === 'quinzenal' ? `<label>1ª quinzena (R$) ${num('q1', m.q1)}</label><label>2ª quinzena (R$) ${num('q2', m.q2)}</label>`
     : md === 'semanal' ? `<label>Semanas no mês <input type="number" min="1" max="6" data-f="nsem" value="${m.nsem ?? wk(mi)}" style="width:80px"></label><label>Valor por semana (R$) ${num('vsem', m.vsem)}</label>`
     : `<label>Saldo inicial (R$) ${num('saldo', m.saldo)}</label>`;
+  const oth = MES.map((_, j) => j).filter(j => j !== mi && calc(j).g > 0);
+  const cmpHtml = !oth.length ? '<small style="color:var(--mut)">Sem outros meses com gastos para comparar.</small>' : S.cats.filter(k => !k.saving).map(k => ({ k, cur: catMonth(k, mi), avg: sum(oth, j => catMonth(k, j)) / oth.length })).filter(r => r.cur > 0 || r.avg > 0).sort((p, q) => q.cur - p.cur).map(({ k, cur, avg }) => {
+    const d = cur - avg, up = d > 0, mx = Math.max(cur, avg) || 1, pc = avg ? Math.abs(d / avg * 100).toFixed(0) + '%' : 'novo';
+    return `<div class="cmpr"><div class="cmph"><span class="tag" style="background:${k.color}">${esc(k.name)}</span><span class="cmpv">${brl(cur)}</span><b class="${up ? 'neg' : 'pos'}">${d === 0 ? '=' : up ? '▲' : '▼'} ${pc} (${up ? '+' : '−'}${brl(Math.abs(d))})</b></div><div class="cmpb"><i style="width:${cur / mx * 100}%;background:${k.color}"></i><u style="left:${avg / mx * 100}%"></u></div><small>média dos outros meses: ${brl(avg)}</small></div>`;
+  }).join('');
   post = () => {
-    donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0), 'pct');
+    if ($('#cm')) donut('#cm', S.cats.map(k => ({ n: k.name, c: k.color, v: catMonth(k, mi) })).filter(x => x.v > 0), 'pct');
     const p2 = n => String(n).padStart(2, '0'), nd = new Date(YR, mi + 1, 0).getDate();
     const dl = [...new Set([...Array.from({ length: nd }, (_, i) => `${YR}-${p2(mi + 1)}-${p2(i + 1)}`), ...m.tx.map(x => x.date).filter(Boolean)])].sort();
     const ds = S.cats.filter(k => !k.saving).map(k => ({ label: k.name, backgroundColor: k.color, data: dl.map(d => sum(m.tx.filter(x => x.cat === k.id && x.date === d), x => x.valor)) })).filter(d => d.data.some(v => v));
@@ -228,7 +235,7 @@ function mes() {
   <div><button class="x" data-ui="pp">${ppick ? '✕ Fechar' : '+ Puxar parcelas mês anterior'}</button><button class="x" data-ui="ps">${spick ? '✕ Fechar' : '+ Puxar simulação'}</button></div>${ppick ? ppanel : ''}${spick ? spanel : ''}
   <div class="row"><input id="nd" type="date" value="${new Date().toISOString().slice(0, 10)}"><input id="nv" type="number" step="0.01" placeholder="Valor" style="width:110px"><select id="np">${popt}</select><select id="nc">${copt}</select><input id="ni" placeholder="Descrição" style="flex:1;min-width:140px"><button class="b" data-act="addtx">Adicionar</button></div>
   <div class="scroll"><table><tr><th>Data</th><th class="n">Valor</th><th>Pagamento</th><th>Categoria</th><th>Descrição</th><th></th></tr>${rows}</table></div></div>
-  <div><div class="card" style="margin-bottom:14px"><h2>Por categoria</h2><div class="chart" style="height:260px"><canvas id="cm"></canvas></div></div>
+  <div><div class="card" style="margin-bottom:14px"><div class="gh"><h2>Por categoria${cmpOn ? ' · vs média' : ''}</h2><button class="ibtn ${cmpOn ? 'on' : ''}" data-ui="cmp" title="Comparar com a média dos outros meses">i</button></div>${cmpOn ? `<div class="cmpl">${cmpHtml}</div>` : `<div class="chart" style="height:290px"><canvas id="cm"></canvas></div>`}</div>
   <div class="card"><h2>Próximo mês · parcelas</h2>
   <div><button class="x" data-ui="pf">${pform ? '✕ Fechar' : '+ Adicionar parcelamento'}</button></div>${pfm}
   <div class="row"><input id="iv" type="number" step="0.01" placeholder="Valor" style="width:100px"><select id="ip">${popt}</select><input id="id" placeholder="Descrição" style="flex:1;min-width:100px"><button class="b" data-act="addinst">Adicionar</button></div>
@@ -270,11 +277,11 @@ function sim() {
   return `<div class="bar"><h1 style="margin:0">Simulação</h1><select class="mbtn" data-f="simmes">${MES.map((n, i) => `<option value="${i}" ${i === (simMi ?? mi) ? 'selected' : ''}>${n}</option>`).join('')}</select></div><div class="grid">
   <div class="card kpi"><span>Entrada prevista [salário] (R$)</span><input type="number" step="0.01" data-f="sentrada" value="${s.entrada || ''}" style="width:100%;margin-top:6px;font-size:18px;font-weight:700"></div>
   ${kpi('Gastos previstos', prev)}${kpi('Sobra prevista', sobra, sgn(sobra))}</div>
-  <div class="card"><h2>Contas e gastos previstos</h2>
+  <div class="simg"><div class="card"><h2>Contas e gastos previstos</h2>
   <div class="row"><input id="sd" placeholder="Descrição" style="flex:1;min-width:160px"><input id="sv" type="number" step="0.01" placeholder="Valor" style="width:110px"><button class="b" data-act="addsim">Adicionar</button>
   <button class="x" data-act="simparc">+ Trazer parcelas de ${MES[simMi ?? mi]}</button><button class="x" data-act="simclear">Limpar tudo</button></div>
   <div class="scroll"><table class="simt"><tr><th>Usar</th><th>Descrição</th><th class="n">Valor</th><th></th></tr>${rows}</table></div></div>
-  <div class="card" style="margin-top:14px"><h2>Gastos × Disponível${sobra < 0 ? ' · gastos acima da entrada' : ''}</h2><div class="chart" style="height:320px"><canvas id="cs"></canvas></div></div>`;
+  <div class="card"><h2>Gastos × Disponível${sobra < 0 ? ' · gastos acima da entrada' : ''}</h2><div class="chart" style="height:320px"><canvas id="cs"></canvas></div></div></div>`;
 }
 
 function catsV() {
@@ -551,6 +558,7 @@ const goto = v => { if (v === 'mes') { open = true; mi = Math.max(0, ACTM()); } 
 const UI = { go: d => goto(d.v), gedit: d => { dedit = dedit === d.id ? null : d.id; }, pf: () => { pform = !pform; }, pp: () => { ppick = !ppick; spick = false; }, ps: () => { spick = !spick; ppick = false; },
   pdot: d => { const a = plan.marc, m = +d.m, i = a.indexOf(m); i < 0 ? a.push(m) : a.splice(i, 1); },
   plnew: () => { plan = newPlan(); },
+  cmp: () => { cmpOn = !cmpOn; },
   plopen: d => { const q = S.plans.find(x => x.id === d.id); if (q) { plan = JSON.parse(JSON.stringify(q)); setTimeout(() => $('#plform')?.scrollIntoView({ behavior: 'smooth' }), 60); } } };
 let drag = null;
 $('#main').ondragstart = e => { drag = e.target.classList?.contains('grip') ? e.target.closest('.gc').dataset.id : null; };
