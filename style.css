@@ -118,3 +118,4 @@ select.mbtn{background:var(--card);border:1px solid var(--line);border-radius:8p
 .simg{margin-top:14px}.simg>.card+.card{margin-top:14px}
 @media(min-width:721px){.simg{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start}.simg>.card+.card{margin-top:0}.simt td,.simt th{padding:6px 8px}}
 @media(min-width:1001px){.plgrid{align-items:stretch}.plgrid>.card:last-child{display:flex;flex-direction:column}.plgrid .chart{height:auto!important;flex:1;min-height:240px}}
+.cmpl{overflow-x:hidden}.wrn{color:#facc15}.bgr{margin-top:10px}.ban b{color:var(--tx)}
